@@ -1,46 +1,78 @@
 import Link from 'next/link';
+import Head from 'next/head';
+import AirlineTrackingPanel from '@/components/AirlineTrackingPanel';
 
 export default function Home() {
   return (
-    <main
-      className="min-h-screen bg-blue-50 p-8 flex flex-col items-start justify-start"
-      style={{
-        backgroundImage: 'url("/globe-outline.svg")',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center',
-        backgroundSize: '80%',
-      }}
-    >
-      <h1 className="text-3xl font-bold mb-6">Cargo Calculators</h1>
+    <>
+      <Head>
+        <title>Cargo Calculators | Cargosizer</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="Convert cargo dimensions, weight, volume, and more" />
+      </Head>
 
-      <div className="flex flex-col gap-4 w-full max-w-xs">
-        <Link
-          href="/chargeable-weight"
-          className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition"
-        >
-          📦 Chargeable Weight Calculator
-        </Link>
+      <main className="relative min-h-screen bg-blue-50 px-4 py-8 sm:px-8">
+        <AirlineTrackingPanel />
 
-        <Link
-          href="/measurement-converter"
-          className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition"
-        >
-          📐 Measurement Converter
-        </Link>
+        <div className="space-y-4 w-full max-w-sm">
+          <h1 className="text-3xl font-bold mb-4 text-blue-800">Cargo Tools</h1>
 
-        <Link
-          href="/temperature-converter"
-          className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition"
-        >
-          🌡️ Temperature Converter
-        </Link>
+          <Link 
+            href="/chargeable-weight" 
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            📦 Chargeable Weight Calculator
+          </Link>
 
-        {/* Future calculator buttons */}
-        {/* 
-        <Link href="/cbm-converter" className="...">📏 CBM Converter</Link> 
-        <Link href="/unit-converter" className="...">🔁 Unit Converter</Link> 
-        */}
-      </div>
-    </main>
+          <Link 
+            href="/measurement-converter" 
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            📐 Measurement Converter
+          </Link>
+
+          <Link 
+            href="/temperature-converter" 
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            🌡️ Temperature Converter
+          </Link>
+
+          <Link 
+            href="https://hts.usitc.gov/search"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            🔍 Search HTS (USITC)
+          </Link>
+
+          <Link 
+            href="https://www.usda.gov/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block bg-green-600 text-white py-3 px-5 rounded-lg shadow hover:bg-green-700 transition text-center"
+          >
+            🐄 USDA Website
+          </Link>
+
+          <Link 
+            href="https://www.fda.gov/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block bg-red-600 text-white py-3 px-5 rounded-lg shadow hover:bg-red-700 transition text-center"
+          >
+            💊 FDA Website
+          </Link>
+
+          <Link 
+            href="/cargo-fitter"
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            🚚 Cargo Fitter
+          </Link>
+        </div>
+      </main>
+    </>
   );
 }
