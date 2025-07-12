@@ -21,6 +21,13 @@ export default function Home() {
           📦 Chargeable Weight Calculator
         </Link>
 
+        <Link
+          href="/measurement-converter"
+          className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition"
+        >
+          📐 Measurement Converter
+        </Link>
+
         {/* Future calculator buttons */}
         {/* 
         <Link href="/cbm-converter" className="...">📏 CBM Converter</Link> 
