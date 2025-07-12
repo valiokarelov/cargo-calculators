@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
+import { useTranslation } from 'next-i18next';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function ChargeableWeight() {
+  const { t } = useTranslation('common');
+
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
@@ -47,22 +51,19 @@ export default function ChargeableWeight() {
       }}
     >
       <div className="space-y-4">
-        <Link
-          href="/"
-          className="text-blue-600 underline inline-block"
-        >
-          &larr; Back to tools
+        <Link href="/" className="text-blue-600 underline inline-block">
+          &larr; {t('backToTools')}
         </Link>
 
         <div className="bg-white/80 p-6 rounded-xl shadow-lg backdrop-blur-sm w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-4">Chargeable Weight Calculator</h1>
+          <h1 className="text-2xl font-bold mb-4">{t('Chargeable Weight')}</h1>
 
           <div className="grid gap-4 max-w-md">
             <div className="flex gap-2">
               <input
                 className="p-2 border rounded w-full"
                 type="number"
-                placeholder="Length"
+                placeholder={t('length')}
                 value={length}
                 onChange={(e) => setLength(e.target.value)}
               />
@@ -82,7 +83,7 @@ export default function ChargeableWeight() {
               <input
                 className="p-2 border rounded w-full"
                 type="number"
-                placeholder="Width"
+                placeholder={t('width')}
                 value={width}
                 onChange={(e) => setWidth(e.target.value)}
               />
@@ -102,7 +103,7 @@ export default function ChargeableWeight() {
               <input
                 className="p-2 border rounded w-full"
                 type="number"
-                placeholder="Height"
+                placeholder={t('height')}
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
               />
@@ -122,16 +123,14 @@ export default function ChargeableWeight() {
               <input
                 className="p-2 border rounded w-full"
                 type="number"
-                placeholder="Gross Weight"
+                placeholder={t('grossWeight')}
                 value={grossWeight}
                 onChange={(e) => setGrossWeight(e.target.value)}
               />
               <select
                 className="border rounded p-2"
                 value={weightUnit}
-                onChange={(e) =>
-                  setWeightUnit(e.target.value as 'kg' | 'lb')
-                }
+                onChange={(e) => setWeightUnit(e.target.value as 'kg' | 'lb')}
               >
                 <option value="kg">kg</option>
                 <option value="lb">lb</option>
@@ -142,7 +141,7 @@ export default function ChargeableWeight() {
               <input
                 className="p-2 border rounded w-full"
                 type="number"
-                placeholder="Pieces"
+                placeholder={t('pieces')}
                 value={pieces}
                 onChange={(e) => setPieces(e.target.value)}
                 min={1}
@@ -154,8 +153,8 @@ export default function ChargeableWeight() {
                   setPieceType(e.target.value as 'box' | 'plt')
                 }
               >
-                <option value="box">📦 box</option>
-                <option value="plt">🧱 plt</option>
+                <option value="box">📦 {t('box')}</option>
+                <option value="plt">🧱 {t('pallet')}</option>
               </select>
             </div>
 
@@ -163,15 +162,22 @@ export default function ChargeableWeight() {
               className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
               onClick={calculate}
             >
-              Calculate
+              {t('calculate')}
             </button>
 
             {cbm !== null && chargeableWeight !== null && (
               <div className="p-4 bg-white rounded shadow space-y-2">
-                <p><strong>Volume:</strong> {cbm} CBM</p>
-                <p><strong>Chargeable Weight:</strong> {chargeableWeight} kg</p>
+                <p><strong>{t('volume')}:</strong> {cbm} CBM</p>
+                <p><strong>{t('chargeableWeight')}:</strong> {chargeableWeight} kg</p>
                 <p className="text-sm text-gray-500">
-                  Based on {pieces} {pieceType}{pieces === '1' ? '' : 's'} of size {length}×{width}×{height} {dimensionUnit}
+                  {t('basedOn', {
+                    pieces,
+                    pieceType: t(pieceType),
+                    length,
+                    width,
+                    height,
+                    dimensionUnit,
+                  })}
                 </p>
               </div>
             )}
@@ -180,4 +186,12 @@ export default function ChargeableWeight() {
       </div>
     </main>
   );
+}
+
+export async function getStaticProps({ locale }: { locale: string }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, ['common']))
+    }
+  };
 }

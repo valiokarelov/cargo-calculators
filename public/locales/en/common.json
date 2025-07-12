@@ -1,0 +1,17 @@
+{
+  "backToTools": "← Back to tools",
+  "chargeableWeight": "Chargeable Weight Calculator",
+  "measurementConverter": "Measurement Converter",
+  "temperatureConverter": "Temperature Converter",
+  "calculate": "Calculate",
+  "length": "Length",
+  "width": "Width",
+  "height": "Height",
+  "grossWeight": "Gross Weight",
+  "pieces": "Pieces",
+  "box": "box",
+  "pallet": "pallet",
+  "volume": "Volume",
+  "basedOn": "Based on {{pieces}} {{pieceType}}{{pieces == '1' ? '' : 's'}} of size {{length}}×{{width}}×{{height}} {{dimensionUnit}}"
+}
+
