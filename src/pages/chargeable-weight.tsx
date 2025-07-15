@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-import i18nConfig from '../../next-i18next.config.js';
 
 export default function ChargeableWeight() {
   const { t } = useTranslation('common');
