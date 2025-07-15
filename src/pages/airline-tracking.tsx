@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 // Sample airline data
 const airlines = [
-  { id: 1, name: "001 AA American Airlines", url: "https://www.aacargo.com/AACargo/tracking" },
+  { id: 1, name: "American Airlines", url: "https://www.aa.com" },
   { id: 2, name: "Delta Air Lines", url: "https://www.delta.com" },
   { id: 3, name: "United Airlines", url: "https://www.united.com" },
   { id: 4, name: "Southwest Airlines", url: "https://www.southwest.com" },
@@ -13,9 +13,12 @@ const airlines = [
 const AirlineTracking = () => {
   return (
     <main className="min-h-screen p-6 bg-blue-50 flex flex-col items-start">
-      <a href="/" className="text-blue-600 underline mb-4">
+      <button 
+        onClick={() => window.history.back()} 
+        className="text-blue-600 underline mb-4 bg-transparent border-none cursor-pointer"
+      >
         &larr; Back to tools
-      </a>
+      </button>
       
       <div className="max-w-4xl mx-auto w-full">
         <h1 className="text-3xl font-bold mb-6 text-blue-800">✈️ Airline Tracking</h1>
