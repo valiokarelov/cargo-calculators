@@ -32,13 +32,13 @@ export default function TemperatureConverter() {
   };
 
   return (
-    <main className="min-h-screen p-6 bg-blue-50">
+    <main className="min-h-screen p-6 bg-blue-50 text-black">
       <div className="space-y-6">
         <Link href="/" className="text-blue-600 underline inline-block">
           &larr; Back to tools
         </Link>
 
-        <h1 className="text-2xl font-bold">🌡️ Temperature Converter</h1>
+        <h1 className="text-2xl font-bold text-black">🌡️ Temperature Converter</h1>
 
         <div className="bg-white/80 p-6 rounded-xl shadow-lg backdrop-blur-sm w-full max-w-md">
           <div className="grid gap-4">
@@ -52,7 +52,7 @@ export default function TemperatureConverter() {
 
             <div className="flex gap-2">
               <select
-                className="border rounded p-2 w-full"
+                className="border rounded p-2 w-full text-black placeholder-gray-500"
                 value={unitFrom}
                 onChange={(e) => setUnitFrom(e.target.value)}
               >
@@ -62,7 +62,7 @@ export default function TemperatureConverter() {
               </select>
 
               <select
-                className="border rounded p-2 w-full"
+                className="border rounded p-2 w-full text-black placeholder-gray-500"
                 value={unitTo}
                 onChange={(e) => setUnitTo(e.target.value)}
               >
@@ -80,7 +80,7 @@ export default function TemperatureConverter() {
             </button>
 
             {result !== null && (
-              <div className="p-4 bg-white rounded shadow">
+              <div className="p-4 bg-white rounded shadow ">
                 <p><strong>Result:</strong> {result} {unitTo}</p>
               </div>
             )}

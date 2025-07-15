@@ -76,13 +76,13 @@ export default function MeasurementConverter() {
   };
 
   return (
-    <main className="min-h-screen p-6 bg-blue-50">
+    <main className="min-h-screen p-6 bg-blue-50 text-black">
       <div className="space-y-6">
         <Link href="/" className="text-blue-600 underline inline-block">
           &larr; Back to tools
         </Link>
 
-        <h1 className="text-2xl font-bold">Measurement Converter</h1>
+        <h1 className="text-2xl font-bold text-black">Measurement Converter</h1>
 
         {/* Mode toggle */}
         <div className="flex items-center gap-4">
@@ -127,7 +127,7 @@ export default function MeasurementConverter() {
 
             <div className="flex gap-2">
               <select
-                className="border rounded p-2 w-full"
+                className="border rounded p-2 w-full text-black placeholder-gray-500"
                 value={unitFrom}
                 onChange={(e) => setUnitFrom(e.target.value)}
               >
@@ -139,7 +139,7 @@ export default function MeasurementConverter() {
               </select>
 
               <select
-                className="border rounded p-2 w-full"
+                className="border rounded p-2 w-full text-black placeholder-gray-500"
                 value={unitTo}
                 onChange={(e) => setUnitTo(e.target.value)}
               >
@@ -159,7 +159,7 @@ export default function MeasurementConverter() {
             </button>
 
             {result !== null && (
-              <div className="p-4 bg-white rounded shadow">
+              <div className="p-4 bg-white rounded shadow text-black placeholder-gray-500">
                 <p>
                   <strong>Result:</strong> {result} {unitTo}
                 </p>
