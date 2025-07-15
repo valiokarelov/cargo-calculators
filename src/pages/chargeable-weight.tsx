@@ -56,7 +56,7 @@ export default function ChargeableWeight() {
         </Link>
 
         <div className="bg-white/80 p-6 rounded-xl shadow-lg backdrop-blur-sm w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-4">{t('Chargeable Weight')}</h1>
+          <h1 className="text-2xl font-bold text black mb-4">{t('Chargeable Weight')}</h1>
 
           <div className="grid gap-4 max-w-md">
             <div className="flex gap-2">
@@ -68,7 +68,7 @@ export default function ChargeableWeight() {
                 onChange={(e) => setLength(e.target.value)}
               />
               <select
-                className="border rounded p-2"
+                className="border rounded p-2 text-black"
                 value={dimensionUnit}
                 onChange={(e) =>
                   setDimensionUnit(e.target.value as 'cm' | 'in')
@@ -88,7 +88,7 @@ export default function ChargeableWeight() {
                 onChange={(e) => setWidth(e.target.value)}
               />
               <select
-                className="border rounded p-2"
+                className="border rounded p-2 text-black"
                 value={dimensionUnit}
                 onChange={(e) =>
                   setDimensionUnit(e.target.value as 'cm' | 'in')
@@ -108,7 +108,7 @@ export default function ChargeableWeight() {
                 onChange={(e) => setHeight(e.target.value)}
               />
               <select
-                className="border rounded p-2"
+                className="border rounded p-2 text-black"
                 value={dimensionUnit}
                 onChange={(e) =>
                   setDimensionUnit(e.target.value as 'cm' | 'in')
@@ -128,7 +128,7 @@ export default function ChargeableWeight() {
                 onChange={(e) => setGrossWeight(e.target.value)}
               />
               <select
-                className="border rounded p-2"
+                className="border rounded p-2 text-black"
                 value={weightUnit}
                 onChange={(e) => setWeightUnit(e.target.value as 'kg' | 'lb')}
               >
@@ -147,7 +147,7 @@ export default function ChargeableWeight() {
                 min={1}
               />
               <select
-                className="border rounded p-2"
+                className="border rounded p-2 text-black"
                 value={pieceType}
                 onChange={(e) =>
                   setPieceType(e.target.value as 'box' | 'plt')
