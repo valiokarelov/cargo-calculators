@@ -12,6 +12,6 @@
   "box": "box",
   "pallet": "pallet",
   "volume": "Volume",
-  "basedOn": "Based on {{pieces}} {{pieceType}}{{pieces == '1' ? '' : 's'}} of size {{length}}×{{width}}×{{height}} {{dimensionUnit}}"
+  "basedOn": "Based on {{pieces}} {{pieceType}} of size {{length}}×{{width}}×{{height}} {{dimensionUnit}}"
 }
 

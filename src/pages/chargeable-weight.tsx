@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import i18nConfig from '../../next-i18next.config.js';
 
 export default function ChargeableWeight() {
   const { t } = useTranslation('common');
@@ -172,7 +173,7 @@ export default function ChargeableWeight() {
                 <p className="text-sm text-gray-500">
                   {t('basedOn', {
                     pieces,
-                    pieceType: t(pieceType),
+                    pieceType: `${t(pieceType)}${pieces === '1' ? '' : 's'}`,
                     length,
                     width,
                     height,
@@ -191,7 +192,7 @@ export default function ChargeableWeight() {
 export async function getStaticProps({ locale }: { locale: string }) {
   return {
     props: {
-      ...(await serverSideTranslations(locale, ['common']))
+      ...(await serverSideTranslations(locale, ['common'])),
     }
   };
 }
