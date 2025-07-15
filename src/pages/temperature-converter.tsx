@@ -44,7 +44,7 @@ export default function TemperatureConverter() {
           <div className="grid gap-4">
             <input
               type="number"
-              className="p-2 border rounded w-full"
+              className="p-2 border rounded w-full text-black placeholder-gray-500"
               placeholder="Enter temperature"
               value={value}
               onChange={(e) => setValue(e.target.value)}

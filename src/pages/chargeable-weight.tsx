@@ -61,7 +61,7 @@ export default function ChargeableWeight() {
           <div className="grid gap-4 max-w-md">
             <div className="flex gap-2">
               <input
-                className="p-2 border rounded w-full"
+                className="p-2 border rounded w-full text-black placeholder-gray-500"
                 type="number"
                 placeholder={t('length')}
                 value={length}
@@ -81,7 +81,7 @@ export default function ChargeableWeight() {
 
             <div className="flex gap-2">
               <input
-                className="p-2 border rounded w-full"
+                className="p-2 border rounded w-full text-black placeholder-gray-500"
                 type="number"
                 placeholder={t('width')}
                 value={width}
@@ -101,7 +101,7 @@ export default function ChargeableWeight() {
 
             <div className="flex gap-2">
               <input
-                className="p-2 border rounded w-full"
+                className="p-2 border rounded w-full text-black placeholder-gray-500"
                 type="number"
                 placeholder={t('height')}
                 value={height}
@@ -121,7 +121,7 @@ export default function ChargeableWeight() {
 
             <div className="flex gap-2">
               <input
-                className="p-2 border rounded w-full"
+                className="p-2 border rounded w-full text-black placeholder-gray-500"
                 type="number"
                 placeholder={t('grossWeight')}
                 value={grossWeight}
@@ -139,7 +139,7 @@ export default function ChargeableWeight() {
 
             <div className="flex gap-2 items-center">
               <input
-                className="p-2 border rounded w-full"
+                className="p-2 border rounded w-full text-black placeholder-gray-500"
                 type="number"
                 placeholder={t('pieces')}
                 value={pieces}
@@ -153,8 +153,8 @@ export default function ChargeableWeight() {
                   setPieceType(e.target.value as 'box' | 'plt')
                 }
               >
-                <option value="box">📦 {t('box')}</option>
                 <option value="plt">🧱 {t('pallet')}</option>
+                <option value="box">📦 {t('box')}</option>
               </select>
             </div>
 
