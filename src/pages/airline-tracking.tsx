@@ -72,7 +72,7 @@ const AirlineTracking = () => {
               placeholder="Search airlines by code or name..."
               value={searchTerm}
               onChange={handleSearchChange}
-              className="w-full px-4 py-3 pl-10 pr-10 border-2 border-blue-200 rounded-full focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+              className="w-full px-4 py-3 pl-10 pr-10 border-2 border-blue-200 rounded-full focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-black"
             />
             <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-400">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
