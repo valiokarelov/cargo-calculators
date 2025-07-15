@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import Head from 'next/head';
-import AirlineTrackingPanel from '@/components/AirlineTrackingPanel';
 
 export default function Home() {
   return (
@@ -12,11 +11,16 @@ export default function Home() {
       </Head>
 
       <main className="relative min-h-screen bg-blue-50 px-4 py-8 sm:px-8">
-        <AirlineTrackingPanel />
-
         <div className="space-y-4 w-full max-w-sm">
           <h1 className="text-3xl font-bold mb-4 text-blue-800">Cargo Tools</h1>
 
+          <Link 
+            href="/airline-tracking" 
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            ✈️ Airline Tracking
+          </Link>
+          
           <Link 
             href="/chargeable-weight" 
             className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
@@ -70,6 +74,13 @@ export default function Home() {
             className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
           >
             🚚 Cargo Fitter
+          </Link>
+
+          <Link 
+            href="/create-ncr" 
+            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
+          >
+            ✏️ Create NCR
           </Link>
         </div>
       </main>
