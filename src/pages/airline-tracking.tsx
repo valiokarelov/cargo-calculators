@@ -39,8 +39,8 @@ const AirlineTracking = () => {
     );
   }, [searchTerm]);
 
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setSearchTerm(e.target.value);
   };
 
   const clearSearch = () => {
