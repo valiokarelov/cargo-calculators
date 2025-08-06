@@ -38,3 +38,30 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+
+## 3D Cargo Fitter
+
+Advanced 3D bin packing algorithm with dual-view visualization.
+
+### Features
+- 3D Bottom-Left-Back fill algorithm
+- Top view (Length × Width) and Side view (Length × Height)
+- Real-time space efficiency calculation
+- Export/Import functionality
+- Responsive design
+
+### Usage
+
+```javascript
+// Initialize
+const fitter = new CargoFitter3D({
+    onUpdate: (event, data) => console.log(event, data)
+});
+
+// Add items
+fitter.addItem(30, 20, 15, 'Box A');
+fitter.addItem(25, 25, 10, 'Box B');
+
+// Fit items into container
+const results = fitter.fitItems(100, 80, 60);
+console.log(`Efficiency: ${results.efficiency}%`);
