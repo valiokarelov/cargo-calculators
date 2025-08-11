@@ -76,11 +76,10 @@ export default function Home() {
             🚚 Cargo Fitter
           </Link>
 
-          <Link 
-            href="/create-ncr" 
-            className="block bg-blue-600 text-white py-3 px-5 rounded-lg shadow hover:bg-blue-700 transition text-center"
-          >
-            ✏️ Create NCR
+          <Link href="/cargo-equipment">
+            <button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-4 px-6 rounded-lg flex items-center justify-center gap-2 transition-colors">
+              🚢 Cargo Equipment
+            </button>
           </Link>
         </div>
       </main>
