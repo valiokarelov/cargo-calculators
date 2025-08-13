@@ -2,21 +2,21 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
 
 // Types
-interface Item {
+interface CargoItem {
   id: string;
   length: number; // in cm (internal canonical unit)
   width: number;
   height: number;
   weight: number; // in kg
   name: string;
-  quantity?: number;
-  fitted?: boolean;
-  x?: number;
-  y?: number;
-  z?: number;
+  quantity: number;
+  fitted: boolean;
+  x: number;
+  y: number;
+  z: number;
 }
 
-interface Preset {
+interface ContainerPreset {
   length: number;
   width: number;
   height: number;
@@ -24,25 +24,58 @@ interface Preset {
   units: string;
 }
 
+interface OrbitControls {
+  update: () => void;
+  dispose: () => void;
+}
+
+interface ContainerDimensions {
+  length: string;
+  width: string;
+  height: string;
+}
+
+interface ItemInput {
+  length: string;
+  width: string;
+  height: string;
+  weight: string;
+  name: string;
+  quantity: string;
+}
+
+interface LoadingStats {
+  totalItems: number;
+  fitted: number;
+  unfitted: number;
+  efficiency: number;
+  totalWeight: number;
+  fittedWeight: number;
+}
+
+interface ConversionFactors {
+  [unit: string]: number;
+}
+
 // Helper utilities
 const uid = () => `${Date.now()}-${Math.random()}`;
 
 // Conversion factors (all internal dimensions use cm, weight uses kg)
-const conversionFactors: Record<string, number> = {
+const conversionFactors: ConversionFactors = {
   cm: 1,
   m: 100,
   in: 2.54,
   ft: 30.48,
 };
 
-const weightConversion: Record<string, number> = {
+const weightConversion: ConversionFactors = {
   kg: 1,
   g: 1 / 1000,
   lb: 0.45359237,
   oz: 0.0283495231,
 };
 
-const containerPresets: Record<string, Preset> = {
+const containerPresets: Record<string, ContainerPreset> = {
   "53-truck": { length: 1600, width: 256, height: 279, name: "53' Truck", units: "cm" },
   "48-truck": { length: 1455, width: 256, height: 279, name: "48' Truck", units: "cm" },
   sprinter: { length: 360, width: 170, height: 180, name: "Sprinter Van", units: "cm" },
@@ -70,9 +103,13 @@ export default function CargoFitterThree() {
   const [units, setUnits] = useState<string>("cm");
   const [weightUnits, setWeightUnits] = useState<string>("kg");
 
-  const [container, setContainer] = useState({ length: "1200", width: "240", height: "200" }); // default cm
+  const [container, setContainer] = useState<ContainerDimensions>({ 
+    length: "1200", 
+    width: "240", 
+    height: "200" 
+  });
 
-  const [itemInput, setItemInput] = useState({ 
+  const [itemInput, setItemInput] = useState<ItemInput>({ 
     length: "120", 
     width: "100", 
     height: "140", 
@@ -82,19 +119,19 @@ export default function CargoFitterThree() {
   });
 
   // Items held in a ref (so Three.js and algorithm can mutate without excessive rerenders)
-  const itemsRef = useRef<Item[]>([]);
-  const [, forceRerender] = useState(0); // quick rerender trigger when needed
+  const itemsRef = useRef<CargoItem[]>([]);
+  const [, forceRerender] = useState<number>(0); // quick rerender trigger when needed
 
   // Three.js refs
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const controlsRef = useRef<unknown>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
   const boxesGroupRef = useRef<THREE.Group | null>(null);
 
   // Stats
-  const [stats, setStats] = useState({ 
+  const [stats, setStats] = useState<LoadingStats>({ 
     totalItems: 0, 
     fitted: 0, 
     unfitted: 0, 
@@ -104,7 +141,7 @@ export default function CargoFitterThree() {
   });
 
   // Simple orbit controls implementation
-  const setupOrbitControls = (camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) => {
+  const setupOrbitControls = (camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer): OrbitControls => {
     let isMouseDown = false;
     let mouseX = 0;
     let mouseY = 0;
@@ -281,24 +318,24 @@ export default function CargoFitterThree() {
     rightMesh.position.set(containerL, containerH/2, containerW/2);
     group.add(rightMesh);
 
-    for (const it of itemsRef.current) {
-      const color = new THREE.Color().setHSL((hashString(it.name) % 360) / 360, 0.6, it.fitted ? 0.55 : 0.3);
+    for (const item of itemsRef.current) {
+      const color = new THREE.Color().setHSL((hashString(item.name) % 360) / 360, 0.6, item.fitted ? 0.55 : 0.3);
       const mat = new THREE.MeshStandardMaterial({ 
         color,
-        transparent: !it.fitted,
-        opacity: it.fitted ? 1.0 : 0.5
+        transparent: !item.fitted,
+        opacity: item.fitted ? 1.0 : 0.5
       });
-      const geo = new THREE.BoxGeometry(it.length, it.height, it.width);
+      const geo = new THREE.BoxGeometry(item.length, item.height, item.width);
       const mesh = new THREE.Mesh(geo, mat);
       
       // Three.js Y is up — we place box center at z=height/2 + its z offset
-      const x = (it.x ?? 0) + it.length / 2;
-      const y = (it.z ?? 0) + it.height / 2; // vertical
-      const z = (it.y ?? 0) + it.width / 2;
+      const x = item.x + item.length / 2;
+      const y = item.z + item.height / 2; // vertical
+      const z = item.y + item.width / 2;
       mesh.position.set(x, y, z);
       
       // Add wireframe for unfitted items
-      if (!it.fitted) {
+      if (!item.fitted) {
         const wireframe = new THREE.WireframeGeometry(geo);
         const line = new THREE.LineSegments(wireframe, new THREE.LineBasicMaterial({ color: 0xff0000 }));
         line.position.copy(mesh.position);
@@ -310,14 +347,16 @@ export default function CargoFitterThree() {
   }, [container.length, container.width, container.height]);
 
   // small hash to get consistent color per name
-  function hashString(s: string) {
+  function hashString(s: string): number {
     let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+    for (let i = 0; i < s.length; i++) {
+      h = (h << 5) - h + s.charCodeAt(i);
+    }
     return Math.abs(h);
   }
 
   // Add items (supports quantity)
-  const addItem = () => {
+  const addItem = (): void => {
     const length = Number(itemInput.length);
     const width = Number(itemInput.width);
     const height = Number(itemInput.height);
@@ -327,8 +366,9 @@ export default function CargoFitterThree() {
 
     if (!(length > 0 && width > 0 && height > 0 && weight > 0 && quantity > 0)) return;
 
+    const newItems: CargoItem[] = [];
     for (let i = 0; i < quantity; i++) {
-      itemsRef.current.push({
+      newItems.push({
         id: uid(),
         length: toCm(length, units),
         width: toCm(width, units),
@@ -343,37 +383,42 @@ export default function CargoFitterThree() {
       });
     }
 
+    itemsRef.current.push(...newItems);
     updateStatsAndRender();
   };
 
   // Clear
-  const clearItems = () => {
+  const clearItems = (): void => {
     itemsRef.current = [];
     updateStatsAndRender();
   };
 
   // Remove single
-  const removeItem = (id: string) => {
-    itemsRef.current = itemsRef.current.filter((it) => it.id !== id);
+  const removeItem = (id: string): void => {
+    itemsRef.current = itemsRef.current.filter((item) => item.id !== id);
     updateStatsAndRender();
   };
 
   // Fit algorithm: simple greedy grid + stacking algorithm
-  const fitItems = () => {
+  const fitItems = (): void => {
     // Work on a copy, sort descending by volume
-    const sorted = [...itemsRef.current].sort((a, b) => (b.length * b.width * b.height) - (a.length * a.width * a.height));
+    const sorted: CargoItem[] = [...itemsRef.current].sort((a, b) => 
+      (b.length * b.width * b.height) - (a.length * a.width * a.height)
+    );
 
     const cL = Number(container.length);
     const cW = Number(container.width);
     const cH = Number(container.height);
 
     // reset positions
-    for (const it of sorted) {
-      it.fitted = false;
-      it.x = 0; it.y = 0; it.z = 0;
+    for (const item of sorted) {
+      item.fitted = false;
+      item.x = 0; 
+      item.y = 0; 
+      item.z = 0;
     }
 
-    const placed: Item[] = [];
+    const placed: CargoItem[] = [];
 
     // We place in a layered grid
     for (const item of sorted) {
@@ -384,9 +429,9 @@ export default function CargoFitterThree() {
         for (let y = 0; y + item.width <= cW && !placedFlag; y += 20) {
           for (let x = 0; x + item.length <= cL && !placedFlag; x += 20) {
             // quick overlap check with placed
-            const overlap = placed.some(p => boxesOverlap3D(
+            const overlap = placed.some(placedItem => boxesOverlap3D(
               x, y, z, item.length, item.width, item.height, 
-              p.x!, p.y!, p.z!, p.length, p.width, p.height
+              placedItem.x, placedItem.y, placedItem.z, placedItem.length, placedItem.width, placedItem.height
             ));
             if (!overlap) {
               // place here
@@ -404,35 +449,45 @@ export default function CargoFitterThree() {
 
     // Apply fitted flags & positions back to itemsRef
     const idToPlaced = new Map(placed.map(p => [p.id, p]));
-    itemsRef.current = itemsRef.current.map(it => idToPlaced.get(it.id) ?? ({ ...it, fitted: false }));
+    itemsRef.current = itemsRef.current.map(item => {
+      const placedItem = idToPlaced.get(item.id);
+      return placedItem ?? { ...item, fitted: false };
+    });
 
     updateStatsAndRender();
   };
 
-  function boxesOverlap3D(x1: number,y1: number,z1: number,l1: number,w1: number,h1: number,x2: number,y2: number,z2: number,l2: number,w2: number,h2: number){
+  function boxesOverlap3D(
+    x1: number, y1: number, z1: number, l1: number, w1: number, h1: number,
+    x2: number, y2: number, z2: number, l2: number, w2: number, h2: number
+  ): boolean {
     return !(x1 + l1 <= x2 || x2 + l2 <= x1 || y1 + w1 <= y2 || y2 + w2 <= y1 || z1 + h1 <= z2 || z2 + h2 <= z1);
   }
 
   // update stats and render visuals
-  const updateStatsAndRender = useCallback(() => {
+  const updateStatsAndRender = useCallback((): void => {
     const total = itemsRef.current.length;
-    const fitted = itemsRef.current.filter(i => i.fitted).length;
+    const fitted = itemsRef.current.filter(item => item.fitted).length;
     const unfitted = total - fitted;
-    const totalWeight = itemsRef.current.reduce((s, it) => s + (it.weight || 0), 0);
-    const fittedWeight = itemsRef.current.filter(i => i.fitted).reduce((s, it) => s + (it.weight || 0), 0);
+    const totalWeight = itemsRef.current.reduce((sum, item) => sum + item.weight, 0);
+    const fittedWeight = itemsRef.current
+      .filter(item => item.fitted)
+      .reduce((sum, item) => sum + item.weight, 0);
 
     // efficiency by volume
-    const cVol = Number(container.length) * Number(container.width) * Number(container.height);
-    const usedVol = itemsRef.current.filter(i => i.fitted).reduce((s, it) => s + (it.length * it.width * it.height), 0);
-    const eff = cVol > 0 ? Math.round((usedVol / cVol) * 100) : 0;
+    const containerVolume = Number(container.length) * Number(container.width) * Number(container.height);
+    const usedVolume = itemsRef.current
+      .filter(item => item.fitted)
+      .reduce((sum, item) => sum + (item.length * item.width * item.height), 0);
+    const efficiency = containerVolume > 0 ? Math.round((usedVolume / containerVolume) * 100) : 0;
 
     setStats({ 
       totalItems: total, 
       fitted, 
       unfitted, 
-      efficiency: eff, 
-      totalWeight: Math.round(totalWeight*100)/100, 
-      fittedWeight: Math.round(fittedWeight*100)/100 
+      efficiency, 
+      totalWeight: Math.round(totalWeight * 100) / 100, 
+      fittedWeight: Math.round(fittedWeight * 100) / 100 
     });
 
     // rebuild visuals
@@ -442,13 +497,19 @@ export default function CargoFitterThree() {
   }, [container.length, container.width, container.height, rebuildBoxes]);
 
   // apply preset
-  const applyPreset = (key: string) => {
-    const p = containerPresets[key];
-    if (!p) return;
-    const l = fromCm(p.length, p.units);
-    const w = fromCm(p.width, p.units);
-    const h = fromCm(p.height, p.units);
-    setContainer({ length: String(l), width: String(w), height: String(h) });
+  const applyPreset = (key: string): void => {
+    const preset = containerPresets[key];
+    if (!preset) return;
+    
+    const length = fromCm(preset.length, preset.units);
+    const width = fromCm(preset.width, preset.units);
+    const height = fromCm(preset.height, preset.units);
+    
+    setContainer({ 
+      length: String(length), 
+      width: String(width), 
+      height: String(height) 
+    });
   };
 
   // initial render of boxes when container or items change
@@ -513,12 +574,17 @@ export default function CargoFitterThree() {
             <label className="block text-sm font-medium text-gray-600 mb-1">Quick Presets</label>
             <select 
               className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-              onChange={e => { if(e.target.value) applyPreset(e.target.value); e.target.value=''; }} 
+              onChange={(e) => { 
+                if(e.target.value) {
+                  applyPreset(e.target.value); 
+                  e.target.value = ''; 
+                }
+              }} 
               defaultValue=""
             >
               <option value="">-- Select Preset --</option>
-              <option value="53-truck">53&#39; Truck Trailer</option>
-              <option value="48-truck">48&#39; Truck Trailer</option>
+              <option value="53-truck">53&apos; Truck Trailer</option>
+              <option value="48-truck">48&apos; Truck Trailer</option>
               <option value="sprinter">Mercedes Sprinter Van</option>
             </select>
           </div>
@@ -683,24 +749,24 @@ export default function CargoFitterThree() {
               </div>
             ) : (
               <div className="space-y-2">
-                {itemsRef.current.map(it => (
-                  <div key={it.id} className={`p-3 border rounded-md ${it.fitted ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                {itemsRef.current.map(item => (
+                  <div key={item.id} className={`p-3 border rounded-md ${item.fitted ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="font-semibold text-gray-800">{it.name}</div>
+                        <div className="font-semibold text-gray-800">{item.name}</div>
                         <div className="text-sm text-gray-600">
-                          {fromCm(it.length, units).toFixed(1)} × {fromCm(it.width, units).toFixed(1)} × {fromCm(it.height, units).toFixed(1)} {units}
+                          {fromCm(item.length, units).toFixed(1)} × {fromCm(item.width, units).toFixed(1)} × {fromCm(item.height, units).toFixed(1)} {units}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {(weightFromKg(it.weight, weightUnits) || 0).toFixed(2)} {weightUnits}
+                          {(weightFromKg(item.weight, weightUnits) || 0).toFixed(2)} {weightUnits}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <div className="text-lg">
-                          {it.fitted ? '✅' : '❌'}
+                          {item.fitted ? '✅' : '❌'}
                         </div>
                         <button 
-                          onClick={() => removeItem(it.id)} 
+                          onClick={() => removeItem(item.id)} 
                           className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 transition-colors"
                         >
                           Remove
@@ -728,7 +794,7 @@ export default function CargoFitterThree() {
           </div>
           <div>
             <h5 className="font-semibold text-gray-800 mb-2">3. Optimize</h5>
-            <p>Click &#34;Optimize Fit&#34; to run the packing algorithm. Fitted items are solid green, unfitted items are red wireframes.</p>
+            <p>Click &quot;Optimize Fit&quot; to run the packing algorithm. Fitted items are solid green, unfitted items are red wireframes.</p>
           </div>
         </div>
       </div>
