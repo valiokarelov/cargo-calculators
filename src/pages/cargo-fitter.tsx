@@ -1,664 +1,506 @@
-  import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import * as THREE from "three";
 
-  interface Item {
-    id: number;
-    length: number;
-    width: number;
-    height: number;
-    weight: number;
-    name: string;
-    fitted?: boolean;
-    x?: number;
-    y?: number;
-    z?: number;
-  }
+// Types
+interface Item {
+  id: string;
+  length: number; // in cm (internal canonical unit)
+  width: number;
+  height: number;
+  weight: number; // in kg
+  name: string;
+  quantity?: number;
+  fitted?: boolean;
+  x?: number;
+  y?: number;
+  z?: number;
+}
 
-  interface Stats {
-    totalItems: number;
-    totalPallets: number;
-    fittedItems: number;
-    fittedPallets: number;
-    unfittedItems: number;
-    unfittedPallets: number;
-    efficiency: number;
-    totalWeight: number;
-    fittedWeight: number;
-  }
+interface Preset {
+  length: number;
+  width: number;
+  height: number;
+  name: string;
+  units: string;
+}
 
-  interface Position {
-    x: number;
-    y: number;
-    z: number;
-  }
+// Helper utilities
+const uid = () => `${Date.now()}-${Math.random()}`;
 
-  interface CargoFitterRef {
-    items: Item[];
-    addItem: (length: number, width: number, height: number, weight: number, name: string, quantity: number) => number[];
-    removeItem: (id: number) => boolean;
-    clearItems: () => void;
-    fitItems: (containerLength: number, containerWidth: number, containerHeight: number) => {
-      totalItems: number;
-      fittedItems: number;
-      unfittedItems: number;
-    };
-    calculateEfficiency: (containerLength: number, containerWidth: number, containerHeight: number) => number;
-  }
+// Conversion factors (all internal dimensions use cm, weight uses kg)
+const conversionFactors: Record<string, number> = {
+  cm: 1,
+  m: 100,
+  in: 2.54,
+  ft: 30.48,
+};
 
-  export default function CargoFitter() {
-    const [items, setItems] = useState<Item[]>([]);
-    const [stats, setStats] = useState<Stats>({
-      totalItems: 0,
-      totalPallets: 0,
-      fittedItems: 0,
-      fittedPallets: 0,
-      unfittedItems: 0,
-      unfittedPallets: 0,
-      efficiency: 0,
-      totalWeight: 0,
-      fittedWeight: 0
-    });
-    const [viewMode, setViewMode] = useState<'top' | 'side' | 'dual'>('top');
-    const [zoomLevel, setZoomLevel] = useState(1);
-    const [fullScreenView, setFullScreenView] = useState<'none' | 'top' | 'side'>('none');
-    const [containerDims, setContainerDims] = useState<{
-      length: string | number;
-      width: string | number;
-      height: string | number;
-    }>({
-      length: '',
-      width: '',
-      height: ''
-    });
-    const [itemInput, setItemInput] = useState({
-      length: '',
-      width: '',
-      height: '',
-      weight: '',
-      name: '',
-      quantity: '1'
-    });
-    const [units, setUnits] = useState('cm');
-    const [weightUnits, setWeightUnits] = useState('kg');
+const weightConversion: Record<string, number> = {
+  kg: 1,
+  g: 1 / 1000,
+  lb: 0.45359237,
+  oz: 0.0283495231,
+};
 
-    // Unit conversion factors (all conversions from cm)
-    const conversionFactors = {
-      cm: 1,
-      m: 0.01,
-      in: 0.393701,
-      ft: 0.0328084
-    };
+const containerPresets: Record<string, Preset> = {
+  "53-truck": { length: 1600, width: 256, height: 279, name: "53' Truck", units: "cm" },
+  "48-truck": { length: 1455, width: 256, height: 279, name: "48' Truck", units: "cm" },
+  sprinter: { length: 360, width: 170, height: 180, name: "Sprinter Van", units: "cm" },
+};
 
-    // Weight conversion factors (all conversions from kg)
-    const weightConversionFactors = {
-      kg: 1,
-      g: 1000,
-      lb: 2.20462,
-      oz: 35.274
-    };
+function toCm(value: number, unit: string) {
+  return value * (conversionFactors[unit] ?? 1);
+}
 
-    // Convert dimensions from one unit to another
-    const convertDimension = (value: number, fromUnit: string, toUnit: string): number => {
-      const inCm = value / conversionFactors[fromUnit as keyof typeof conversionFactors];
-      return parseFloat((inCm * conversionFactors[toUnit as keyof typeof conversionFactors]).toFixed(2));
-    };
+function fromCm(valueCm: number, unit: string) {
+  return valueCm / (conversionFactors[unit] ?? 1);
+}
 
-    // Convert weight from one unit to another
-    const convertWeight = (value: number, fromUnit: string, toUnit: string): number => {
-      const inKg = value / weightConversionFactors[fromUnit as keyof typeof weightConversionFactors];
-      return parseFloat((inKg * weightConversionFactors[toUnit as keyof typeof weightConversionFactors]).toFixed(2));
-    };
+function weightToKg(value: number, unit: string) {
+  return value * (weightConversion[unit] ?? 1);
+}
 
-    // Handle unit change with conversion
-    const handleUnitsChange = (newUnits: string) => {
-      if (newUnits !== units) {
-        // Convert container dimensions
-        setContainerDims({
-          length: containerDims.length ? convertDimension(Number(containerDims.length), units, newUnits).toString() : '',
-          width: containerDims.width ? convertDimension(Number(containerDims.width), units, newUnits).toString() : '',
-          height: containerDims.height ? convertDimension(Number(containerDims.height), units, newUnits).toString() : ''
-        });
+function weightFromKg(valueKg: number, unit: string) {
+  return valueKg / (weightConversion[unit] ?? 1);
+}
 
-        // Convert item input values if they exist
-        if (itemInput.length || itemInput.width || itemInput.height) {
-          setItemInput({
-            ...itemInput,
-            length: itemInput.length ? convertDimension(Number(itemInput.length), units, newUnits).toString() : '',
-            width: itemInput.width ? convertDimension(Number(itemInput.width), units, newUnits).toString() : '',
-            height: itemInput.height ? convertDimension(Number(itemInput.height), units, newUnits).toString() : ''
-          });
-        }
+// Component
+export default function CargoFitterThree() {
+  // UI states
+  const [units, setUnits] = useState<string>("cm");
+  const [weightUnits, setWeightUnits] = useState<string>("kg");
 
-        // Convert existing items
-        if (cargoFitterRef.current && cargoFitterRef.current.items.length > 0) {
-          cargoFitterRef.current.items.forEach((item: Item) => {
-            item.length = convertDimension(item.length, units, newUnits);
-            item.width = convertDimension(item.width, units, newUnits);
-            item.height = convertDimension(item.height, units, newUnits);
-            if (item.x !== undefined) item.x = convertDimension(item.x, units, newUnits);
-            if (item.y !== undefined) item.y = convertDimension(item.y, units, newUnits);
-            if (item.z !== undefined) item.z = convertDimension(item.z, units, newUnits);
-          });
-          updateItemsList();
-          updateStats();
-          drawVisualization();
-        }
+  const [container, setContainer] = useState({ length: "1200", width: "240", height: "200" }); // default cm
 
-        setUnits(newUnits);
-      }
+  const [itemInput, setItemInput] = useState({ 
+    length: "120", 
+    width: "100", 
+    height: "140", 
+    weight: "300", 
+    name: "Pallet", 
+    quantity: "1" 
+  });
+
+  // Items held in a ref (so Three.js and algorithm can mutate without excessive rerenders)
+  const itemsRef = useRef<Item[]>([]);
+  const [, forceRerender] = useState(0); // quick rerender trigger when needed
+
+  // Three.js refs
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<unknown>(null);
+  const boxesGroupRef = useRef<THREE.Group | null>(null);
+
+  // Stats
+  const [stats, setStats] = useState({ 
+    totalItems: 0, 
+    fitted: 0, 
+    unfitted: 0, 
+    efficiency: 0, 
+    totalWeight: 0, 
+    fittedWeight: 0 
+  });
+
+  // Simple orbit controls implementation
+  const setupOrbitControls = (camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) => {
+    let isMouseDown = false;
+    let mouseX = 0;
+    let mouseY = 0;
+    let targetX = 600;
+    let targetY = 400;
+    let targetZ = 800;
+    let currentX = targetX;
+    let currentY = targetY;
+    let currentZ = targetZ;
+
+    const onMouseDown = (event: MouseEvent) => {
+      isMouseDown = true;
+      mouseX = event.clientX;
+      mouseY = event.clientY;
     };
 
-    // Handle weight unit change with conversion
-    const handleWeightUnitsChange = (newWeightUnits: string) => {
-      if (newWeightUnits !== weightUnits) {
-        // Convert item input weight if it exists
-        if (itemInput.weight) {
-          setItemInput({
-            ...itemInput,
-            weight: convertWeight(Number(itemInput.weight), weightUnits, newWeightUnits).toString()
-          });
-        }
-
-        // Convert existing items weights
-        if (cargoFitterRef.current && cargoFitterRef.current.items.length > 0) {
-          cargoFitterRef.current.items.forEach((item: Item) => {
-            item.weight = convertWeight(item.weight, weightUnits, newWeightUnits);
-          });
-          updateItemsList();
-          updateStats();
-        }
-
-        setWeightUnits(newWeightUnits);
-      }
-    };
-
-    const containerPresets = {
-      '53-truck': { length: 1600, width: 256, height: 279, name: "53&apos; Truck", units: 'cm' },
-      '48-truck': { length: 1455, width: 256, height: 279, name: "48&apos; Truck", units: 'cm' },
-      'sprinter': { length: 360, width: 170, height: 180, name: "Sprinter Van", units: 'cm' },
-      'pmc-q6': { length: 244, width: 317, height: 294, name: "PMC MD (Q6)", units: 'cm' },
-      'pmc-q7': { length: 317, width: 244, height: 300, name: "PMC MD (Q7)", units: 'cm' },
-      'pmc-j4': { length: 223.5, width: 317.5, height: 243.84, name: "PMC MD (J4)", units: 'cm' },
-      'pmc-ld': { length: 224, width: 317, height: 163, name: "PMC LD", units: 'cm' }
-    };
-
-    const applyPreset = (presetKey: string) => {
-      const preset = containerPresets[presetKey as keyof typeof containerPresets];
-      if (preset) {
-        const convertedDims = {
-          length: convertDimension(preset.length, preset.units, units),
-          width: convertDimension(preset.width, preset.units, units),
-          height: convertDimension(preset.height, preset.units, units)
-        };
-        
-        setContainerDims(convertedDims);
-      }
-    };
-
-    const cargoFitterRef = useRef<CargoFitterRef | null>(null);
-    const topCanvasRef = useRef<HTMLCanvasElement>(null);
-    const sideCanvasRef = useRef<HTMLCanvasElement>(null);
-
-    const boxesOverlap3D = useCallback((x1: number, y1: number, z1: number, l1: number, w1: number, h1: number, x2: number, y2: number, z2: number, l2: number, w2: number, h2: number): boolean => {
-      return !(x1 + l1 <= x2 || x2 + l2 <= x1 || 
-              y1 + w1 <= y2 || y2 + w2 <= y1 || 
-              z1 + h1 <= z2 || z2 + h2 <= z1);
-    }, []);
-
-    const canPlaceItem3D = useCallback((item: Item, x: number, y: number, z: number, fittedItems: Item[], containerLength: number, containerWidth: number, containerHeight: number): boolean => {
-      if (x + item.length > containerLength || 
-          y + item.width > containerWidth || 
-          z + item.height > containerHeight) {
-        return false;
-      }
-
-      for (const placedItem of fittedItems) {
-        if (boxesOverlap3D(
-          x, y, z, item.length, item.width, item.height,
-          placedItem.x!, placedItem.y!, placedItem.z!, 
-          placedItem.length, placedItem.width, placedItem.height
-        )) {
-          return false;
-        }
-      }
-      return true;
-    }, [boxesOverlap3D]);
-
-    // 3D positioning algorithm
-    const findBestPosition3D = useCallback((item: Item, fittedItems: Item[], containerLength: number, containerWidth: number, containerHeight: number): Position | null => {
-      for (let z = 0; z <= containerHeight - item.height; z++) {
-        for (let y = 0; y <= containerWidth - item.width; y++) {
-          for (let x = 0; x <= containerLength - item.length; x++) {
-            if (canPlaceItem3D(item, x, y, z, fittedItems, containerLength, containerWidth, containerHeight)) {
-              return { x, y, z };
-            }
-          }
-        }
-      }
-      return null;
-    }, [canPlaceItem3D]);
-
-    const updateItemsList = useCallback(() => {
-      if (cargoFitterRef.current) {
-        setItems([...cargoFitterRef.current.items]);
-      }
-    }, []);
-
-    const updateStats = useCallback(() => {
-      if (cargoFitterRef.current) {
-        const totalItems = cargoFitterRef.current.items.length;
-        const fittedCount = cargoFitterRef.current.items.filter((item: Item) => item.fitted).length;
-        const unfittedCount = totalItems - fittedCount;
-        
-        // Calculate unique pallet names for count
-        const uniquePalletNames = new Set(cargoFitterRef.current.items.map((item: Item) => item.name));
-        const totalPallets = uniquePalletNames.size;
-        
-        const fittedPalletNames = new Set(cargoFitterRef.current.items.filter((item: Item) => item.fitted).map((item: Item) => item.name));
-        const fittedPallets = fittedPalletNames.size;
-        const unfittedPallets = totalPallets - fittedPallets;
-        
-        // Calculate weights
-        const totalWeight = cargoFitterRef.current.items.reduce((sum: number, item: Item) => sum + item.weight, 0);
-        const fittedWeight = cargoFitterRef.current.items
-          .filter((item: Item) => item.fitted)
-          .reduce((sum: number, item: Item) => sum + item.weight, 0);
-        
-        const efficiency = containerDims.length && containerDims.width && containerDims.height 
-          ? cargoFitterRef.current.calculateEfficiency(
-              Number(containerDims.length),
-              Number(containerDims.width),
-              Number(containerDims.height)
-            )
-          : 0;
-
-        setStats({
-          totalItems,
-          totalPallets,
-          fittedItems: fittedCount,
-          fittedPallets,
-          unfittedItems: unfittedCount,
-          unfittedPallets,
-          efficiency: Math.round(efficiency),
-          totalWeight: Math.round(totalWeight * 100) / 100,
-          fittedWeight: Math.round(fittedWeight * 100) / 100
-        });
-      }
-    }, [containerDims.length, containerDims.width, containerDims.height]);
-
-    const drawTopView = useCallback(() => {
-      if (!topCanvasRef.current) return;
-
-      const canvas = topCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Check if container dimensions are provided
-      if (!containerDims.length || !containerDims.width) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#4a5568';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Enter container dimensions to see visualization', canvas.width / 2, canvas.height / 2);
-        return;
-      }
-
-      const containerLength = Number(containerDims.length);
-      const containerWidth = Number(containerDims.width);
-
-      const maxWidth = (canvas.width - 80) * zoomLevel;
-      const maxHeight = (canvas.height - 80) * zoomLevel;
-      const scale = Math.min(maxWidth / containerLength, maxHeight / containerWidth);
+    const onMouseMove = (event: MouseEvent) => {
+      if (!isMouseDown) return;
       
-      const scaledLength = containerLength * scale;
-      const scaledWidth = containerWidth * scale;
-      const offsetX = (canvas.width - scaledLength) / 2;
-      const offsetY = (canvas.height - scaledWidth) / 2;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#2d3748';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(offsetX, offsetY, scaledLength, scaledWidth);
-      ctx.fillStyle = '#f7fafc';
-      ctx.fillRect(offsetX, offsetY, scaledLength, scaledWidth);
-
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98fb98', '#f4a261', '#ff9f43', '#6c5ce7', '#fd79a8', '#00b894'];
+      const deltaX = event.clientX - mouseX;
+      const deltaY = event.clientY - mouseY;
       
-      // Group items by name to assign same color to same pallet type
-      const palletColors: { [key: string]: string } = {};
-      let colorIndex = 0;
+      targetX = Math.max(200, Math.min(1500, targetX - deltaX * 2));
+      targetY = Math.max(100, Math.min(800, targetY + deltaY * 2));
       
-      items.forEach((item) => {
-        if (!palletColors[item.name]) {
-          palletColors[item.name] = colors[colorIndex % colors.length];
-          colorIndex++;
-        }
-        
-        if (item.fitted && item.x !== undefined && item.y !== undefined) {
-          const x = offsetX + item.x * scale;
-          const y = offsetY + item.y * scale;
-          const width = item.length * scale;
-          const height = item.width * scale;
+      mouseX = event.clientX;
+      mouseY = event.clientY;
+    };
 
-          ctx.fillStyle = palletColors[item.name];
-          ctx.fillRect(x, y, width, height);
-          ctx.strokeStyle = '#2d3748';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, y, width, height);
+    const onMouseUp = () => {
+      isMouseDown = false;
+    };
 
-          if (width > 30 && height > 20) {
-            ctx.fillStyle = '#2d3748';
-            ctx.font = `${Math.max(8, 10 * zoomLevel)}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillText(item.name, x + width/2, y + height/2 - 5);
-            ctx.fillText(`${item.weight}${weightUnits}`, x + width/2, y + height/2 + 8);
-          }
-        }
+    const onWheel = (event: WheelEvent) => {
+      targetZ = Math.max(300, Math.min(2000, targetZ + event.deltaY));
+      event.preventDefault();
+    };
+
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+    renderer.domElement.addEventListener('mouseup', onMouseUp);
+    renderer.domElement.addEventListener('wheel', onWheel);
+
+    return {
+      update: () => {
+        currentX += (targetX - currentX) * 0.05;
+        currentY += (targetY - currentY) * 0.05;
+        currentZ += (targetZ - currentZ) * 0.05;
+        camera.position.set(currentX, currentY, currentZ);
+        camera.lookAt(600, 0, 200);
+      },
+      dispose: () => {
+        renderer.domElement.removeEventListener('mousedown', onMouseDown);
+        renderer.domElement.removeEventListener('mousemove', onMouseMove);
+        renderer.domElement.removeEventListener('mouseup', onMouseUp);
+        renderer.domElement.removeEventListener('wheel', onWheel);
+      }
+    };
+  };
+
+  // Initialize Three.js scene
+  useEffect(() => {
+    if (!mountRef.current) return;
+
+    const currentMount = mountRef.current;
+    const width = 800;
+    const height = 560;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f7fb);
+
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 5000);
+    camera.position.set(600, 400, 800);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+
+    const light = new THREE.DirectionalLight(0xffffff, 0.9);
+    light.position.set(500, 1000, 500);
+    scene.add(light);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambient);
+
+    const grid = new THREE.GridHelper(2000, 40, 0xcccccc, 0xeeeeee);
+    scene.add(grid);
+
+    // group to hold box meshes
+    const boxesGroup = new THREE.Group();
+    scene.add(boxesGroup);
+
+    // Simple orbit controls
+    const controls = setupOrbitControls(camera, renderer);
+
+    // Attach
+    currentMount.appendChild(renderer.domElement);
+
+    sceneRef.current = scene;
+    rendererRef.current = renderer;
+    cameraRef.current = camera;
+    controlsRef.current = controls;
+    boxesGroupRef.current = boxesGroup;
+
+    // animation
+    let frameId: number;
+    const animate = () => {
+      controls.update();
+      renderer.render(scene, camera);
+      frameId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => {
+      if (frameId) cancelAnimationFrame(frameId);
+      controls.dispose();
+      renderer.dispose();
+      if (renderer.domElement && currentMount?.contains(renderer.domElement)) {
+        currentMount.removeChild(renderer.domElement);
+      }
+      sceneRef.current = null;
+      rendererRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+    };
+  }, []);
+
+  // Utility to rebuild visual boxes from items array
+  const rebuildBoxes = useCallback(() => {
+    if (!boxesGroupRef.current) return;
+    const group = boxesGroupRef.current;
+    // clear
+    while (group.children.length) group.remove(group.children[0]);
+
+    const containerL = Number(container.length);
+    const containerW = Number(container.width);
+    const containerH = Number(container.height);
+
+    // container base plane
+    const containerGeo = new THREE.BoxGeometry(containerL, 2, containerW);
+    const containerMat = new THREE.MeshStandardMaterial({ 
+      color: 0xffffff, 
+      transparent: true, 
+      opacity: 0.2 
+    });
+    const containerMesh = new THREE.Mesh(containerGeo, containerMat);
+    containerMesh.position.set(containerL / 2, -1, containerW / 2);
+    group.add(containerMesh);
+
+    // Container walls for visualization
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x999999,
+      transparent: true,
+      opacity: 0.1,
+      side: THREE.DoubleSide
+    });
+
+    // Back wall
+    const backWall = new THREE.PlaneGeometry(containerL, containerH);
+    const backMesh = new THREE.Mesh(backWall, wallMaterial);
+    backMesh.position.set(containerL/2, containerH/2, 0);
+    group.add(backMesh);
+
+    // Left wall
+    const leftWall = new THREE.PlaneGeometry(containerW, containerH);
+    const leftMesh = new THREE.Mesh(leftWall, wallMaterial);
+    leftMesh.rotation.y = Math.PI / 2;
+    leftMesh.position.set(0, containerH/2, containerW/2);
+    group.add(leftMesh);
+
+    // Right wall
+    const rightWall = new THREE.PlaneGeometry(containerW, containerH);
+    const rightMesh = new THREE.Mesh(rightWall, wallMaterial);
+    rightMesh.rotation.y = -Math.PI / 2;
+    rightMesh.position.set(containerL, containerH/2, containerW/2);
+    group.add(rightMesh);
+
+    for (const it of itemsRef.current) {
+      const color = new THREE.Color().setHSL((hashString(it.name) % 360) / 360, 0.6, it.fitted ? 0.55 : 0.3);
+      const mat = new THREE.MeshStandardMaterial({ 
+        color,
+        transparent: !it.fitted,
+        opacity: it.fitted ? 1.0 : 0.5
       });
-
-      ctx.fillStyle = '#4a5568';
-      ctx.font = `${Math.max(10, 12 * zoomLevel)}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        `Container: ${containerLength}×${containerWidth}${units}`, 
-        canvas.width / 2, 
-        offsetY + scaledWidth + 20
-      );
-    }, [containerDims, units, weightUnits, items, zoomLevel]);
-
-    const drawSideView = useCallback(() => {
-      if (!sideCanvasRef.current) return;
-
-      const canvas = sideCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Check if container dimensions are provided
-      if (!containerDims.length || !containerDims.height) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#4a5568';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Enter container dimensions to see visualization', canvas.width / 2, canvas.height / 2);
-        return;
+      const geo = new THREE.BoxGeometry(it.length, it.height, it.width);
+      const mesh = new THREE.Mesh(geo, mat);
+      
+      // Three.js Y is up — we place box center at z=height/2 + its z offset
+      const x = (it.x ?? 0) + it.length / 2;
+      const y = (it.z ?? 0) + it.height / 2; // vertical
+      const z = (it.y ?? 0) + it.width / 2;
+      mesh.position.set(x, y, z);
+      
+      // Add wireframe for unfitted items
+      if (!it.fitted) {
+        const wireframe = new THREE.WireframeGeometry(geo);
+        const line = new THREE.LineSegments(wireframe, new THREE.LineBasicMaterial({ color: 0xff0000 }));
+        line.position.copy(mesh.position);
+        group.add(line);
       }
-
-      const containerLength = Number(containerDims.length);
-      const containerHeight = Number(containerDims.height);
-
-      const maxWidth = (canvas.width - 80) * zoomLevel;
-      const maxHeight = (canvas.height - 80) * zoomLevel;
-      const scale = Math.min(maxWidth / containerLength, maxHeight / containerHeight);
       
-      const scaledLength = containerLength * scale;
-      const scaledHeight = containerHeight * scale;
-      const offsetX = (canvas.width - scaledLength) / 2;
-      const offsetY = (canvas.height - scaledHeight) / 2;
+      group.add(mesh);
+    }
+  }, [container.length, container.width, container.height]);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#2d3748';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(offsetX, offsetY, scaledLength, scaledHeight);
-      ctx.fillStyle = '#f7fafc';
-      ctx.fillRect(offsetX, offsetY, scaledLength, scaledHeight);
+  // small hash to get consistent color per name
+  function hashString(s: string) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+    return Math.abs(h);
+  }
 
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98fb98', '#f4a261', '#ff9f43', '#6c5ce7', '#fd79a8', '#00b894'];
-      
-      // Group items by name to assign same color to same pallet type
-      const palletColors: { [key: string]: string } = {};
-      let colorIndex = 0;
-      
-      items.forEach((item) => {
-        if (!palletColors[item.name]) {
-          palletColors[item.name] = colors[colorIndex % colors.length];
-          colorIndex++;
-        }
-        
-        if (item.fitted && item.x !== undefined && item.z !== undefined) {
-          const x = offsetX + item.x * scale;
-          const y = offsetY + (containerHeight - item.z! - item.height) * scale;
-          const width = item.length * scale;
-          const height = item.height * scale;
+  // Add items (supports quantity)
+  const addItem = () => {
+    const length = Number(itemInput.length);
+    const width = Number(itemInput.width);
+    const height = Number(itemInput.height);
+    const weight = Number(itemInput.weight);
+    const quantity = Math.max(1, Math.floor(Number(itemInput.quantity) || 1));
+    const name = itemInput.name.trim() || "Pallet";
 
-          ctx.fillStyle = palletColors[item.name];
-          ctx.fillRect(x, y, width, height);
-          ctx.strokeStyle = '#2d3748';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, y, width, height);
+    if (!(length > 0 && width > 0 && height > 0 && weight > 0 && quantity > 0)) return;
 
-          if (width > 30 && height > 20) {
-            ctx.fillStyle = '#2d3748';
-            ctx.font = `${Math.max(8, 10 * zoomLevel)}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillText(item.name, x + width/2, y + height/2 - 5);
-            ctx.fillText(`${item.weight}${weightUnits}`, x + width/2, y + height/2 + 8);
-          }
-        }
+    for (let i = 0; i < quantity; i++) {
+      itemsRef.current.push({
+        id: uid(),
+        length: toCm(length, units),
+        width: toCm(width, units),
+        height: toCm(height, units),
+        weight: weightToKg(weight, weightUnits),
+        name: quantity > 1 ? `${name} #${i + 1}` : name,
+        quantity: 1,
+        fitted: false,
+        x: 0,
+        y: 0,
+        z: 0,
       });
+    }
 
-      ctx.fillStyle = '#4a5568';
-      ctx.font = `${Math.max(10, 12 * zoomLevel)}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        `Container: ${containerLength}×${containerHeight}${units}`, 
-        canvas.width / 2, 
-        offsetY + scaledHeight + 20
-      );
-    }, [containerDims, units, weightUnits, items, zoomLevel]);
+    updateStatsAndRender();
+  };
 
-    const drawVisualization = useCallback(() => {
-      drawTopView();
-      if (viewMode === 'side' || viewMode === 'dual') {
-        drawSideView();
-      }
-    }, [drawTopView, drawSideView, viewMode]);
+  // Clear
+  const clearItems = () => {
+    itemsRef.current = [];
+    updateStatsAndRender();
+  };
 
-    useEffect(() => {
-      cargoFitterRef.current = {
-        items: [],
-        addItem: (length: number, width: number, height: number, weight: number, name: string, quantity: number) => {
-          const ids: number[] = [];
-          for (let i = 0; i < quantity; i++) {
-            const item: Item = {
-              id: Date.now() + Math.random() + i,
-              length,
-              width, 
-              height,
-              weight,
-              name: quantity > 1 ? `${name} #${i + 1}` : name,
-              fitted: false,
-              x: 0,
-              y: 0,
-              z: 0
-            };
-            cargoFitterRef.current!.items.push(item);
-            ids.push(item.id);
-          }
-          return ids;
-        },
-        removeItem: (id: number) => {
-          cargoFitterRef.current!.items = cargoFitterRef.current!.items.filter((item: Item) => item.id !== id);
-          return true;
-        },
-        clearItems: () => {
-          cargoFitterRef.current!.items = [];
-        },
-        fitItems: (containerLength: number, containerWidth: number, containerHeight: number) => {
-          cargoFitterRef.current!.items.forEach((item: Item) => {
-            item.fitted = false;
-            item.x = 0;
-            item.y = 0;
-            item.z = 0;
-          });
-          
-          const sortedItems = [...cargoFitterRef.current!.items].sort((a: Item, b: Item) => 
-            (b.length * b.width * b.height) - (a.length * a.width * a.height)
-          );
+  // Remove single
+  const removeItem = (id: string) => {
+    itemsRef.current = itemsRef.current.filter((it) => it.id !== id);
+    updateStatsAndRender();
+  };
 
-          const fittedItems: Item[] = [];
+  // Fit algorithm: simple greedy grid + stacking algorithm
+  const fitItems = () => {
+    // Work on a copy, sort descending by volume
+    const sorted = [...itemsRef.current].sort((a, b) => (b.length * b.width * b.height) - (a.length * a.width * a.height));
 
-          for (const item of sortedItems) {
-            const position = findBestPosition3D(item, fittedItems, containerLength, containerWidth, containerHeight);
-            if (position) {
-              item.x = position.x;
-              item.y = position.y;
-              item.z = position.z;
+    const cL = Number(container.length);
+    const cW = Number(container.width);
+    const cH = Number(container.height);
+
+    // reset positions
+    for (const it of sorted) {
+      it.fitted = false;
+      it.x = 0; it.y = 0; it.z = 0;
+    }
+
+    const placed: Item[] = [];
+
+    // We place in a layered grid
+    for (const item of sorted) {
+      let placedFlag = false;
+      // iterate over layers (z)
+      for (let z = 0; z + item.height <= cH && !placedFlag; z += 20) {
+        // iterate over y rows
+        for (let y = 0; y + item.width <= cW && !placedFlag; y += 20) {
+          for (let x = 0; x + item.length <= cL && !placedFlag; x += 20) {
+            // quick overlap check with placed
+            const overlap = placed.some(p => boxesOverlap3D(
+              x, y, z, item.length, item.width, item.height, 
+              p.x!, p.y!, p.z!, p.length, p.width, p.height
+            ));
+            if (!overlap) {
+              // place here
+              item.x = x;
+              item.y = y;
+              item.z = z;
               item.fitted = true;
-              fittedItems.push(item);
+              placed.push(item);
+              placedFlag = true;
             }
           }
-
-          return {
-            totalItems: cargoFitterRef.current!.items.length,
-            fittedItems: fittedItems.length,
-            unfittedItems: cargoFitterRef.current!.items.length - fittedItems.length
-          };
-        },
-        calculateEfficiency: (containerLength: number, containerWidth: number, containerHeight: number) => {
-          const containerVolume = containerLength * containerWidth * containerHeight;
-          const usedVolume = cargoFitterRef.current!.items
-            .filter((item: Item) => item.fitted)
-            .reduce((sum: number, item: Item) => sum + (item.length * item.width * item.height), 0);
-          
-          return containerVolume > 0 ? (usedVolume / containerVolume) * 100 : 0;
         }
-      };
-    }, [findBestPosition3D]);
-
-    const addItem = () => {
-      const length = Number(itemInput.length);
-      const width = Number(itemInput.width);
-      const height = Number(itemInput.height);
-      const weight = Number(itemInput.weight);
-      const quantity = Number(itemInput.quantity);
-      
-      if (cargoFitterRef.current && length > 0 && width > 0 && height > 0 && weight > 0 && quantity > 0 && itemInput.name.trim()) {
-        cargoFitterRef.current.addItem(
-          length,
-          width,
-          height,
-          weight,
-          itemInput.name.trim(),
-          quantity
-        );
-        
-        setItemInput({
-          length: '',
-          width: '',
-          height: '',
-          weight: '',
-          name: '',
-          quantity: '1'
-        });
-        
-        updateItemsList();
-        updateStats();
       }
-    };
+    }
 
-    const removeItem = (id: number) => {
-      if (cargoFitterRef.current) {
-        cargoFitterRef.current.removeItem(id);
-        updateItemsList();
-        updateStats();
-        drawVisualization();
-      }
-    };
+    // Apply fitted flags & positions back to itemsRef
+    const idToPlaced = new Map(placed.map(p => [p.id, p]));
+    itemsRef.current = itemsRef.current.map(it => idToPlaced.get(it.id) ?? ({ ...it, fitted: false }));
 
-    const clearItems = () => {
-      if (cargoFitterRef.current) {
-        cargoFitterRef.current.clearItems();
-        updateItemsList();
-        updateStats();
-        drawVisualization();
-      }
-    };
+    updateStatsAndRender();
+  };
 
-    const fitItems = () => {
-      if (cargoFitterRef.current && containerDims.length && containerDims.width && containerDims.height) {
-        cargoFitterRef.current.fitItems(
-          Number(containerDims.length),
-          Number(containerDims.width),
-          Number(containerDims.height)
-        );
-        updateItemsList();
-        updateStats();
-        drawVisualization();
-      }
-    };
+  function boxesOverlap3D(x1: number,y1: number,z1: number,l1: number,w1: number,h1: number,x2: number,y2: number,z2: number,l2: number,w2: number,h2: number){
+    return !(x1 + l1 <= x2 || x2 + l2 <= x1 || y1 + w1 <= y2 || y2 + w2 <= y1 || z1 + h1 <= z2 || z2 + h2 <= z1);
+  }
 
-    const handleViewChange = (mode: 'top' | 'side' | 'dual') => {
-      setViewMode(mode);
-    };
+  // update stats and render visuals
+  const updateStatsAndRender = useCallback(() => {
+    const total = itemsRef.current.length;
+    const fitted = itemsRef.current.filter(i => i.fitted).length;
+    const unfitted = total - fitted;
+    const totalWeight = itemsRef.current.reduce((s, it) => s + (it.weight || 0), 0);
+    const fittedWeight = itemsRef.current.filter(i => i.fitted).reduce((s, it) => s + (it.weight || 0), 0);
 
-    useEffect(() => {
-      drawVisualization();
-    }, [drawVisualization]);
+    // efficiency by volume
+    const cVol = Number(container.length) * Number(container.width) * Number(container.height);
+    const usedVol = itemsRef.current.filter(i => i.fitted).reduce((s, it) => s + (it.length * it.width * it.height), 0);
+    const eff = cVol > 0 ? Math.round((usedVol / cVol) * 100) : 0;
 
-    useEffect(() => {
-      updateStats();
-    }, [updateStats]);
+    setStats({ 
+      totalItems: total, 
+      fitted, 
+      unfitted, 
+      efficiency: eff, 
+      totalWeight: Math.round(totalWeight*100)/100, 
+      fittedWeight: Math.round(fittedWeight*100)/100 
+    });
 
-    return (
-      <div className="max-w-7xl mx-auto p-5 bg-gray-50 min-h-screen">
-        <style jsx>{`
-          .cargo-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
-          .cargo-section { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-          .cargo-section h3 { color: #2d3748; margin-bottom: 20px; font-size: 1.3rem; font-weight: 600; }
-          .cargo-dimension-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-          .cargo-dimension-group { display: flex; flex-direction: column; gap: 5px; }
-          .cargo-dimension-group label { font-size: 12px; font-weight: 600; color: #4a5568; text-transform: uppercase; }
-          .cargo-input-group { display: flex; gap: 15px; margin-bottom: 15px; align-items: center; }
-          .cargo-input-group label { min-width: 80px; font-weight: 500; color: #4a5568; }
-          .cargo-input { padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; flex: 1; font-size: 14px; transition: all 0.3s ease; }
-          .cargo-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
-          .cargo-btn { background: #667eea; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.3s ease; }
-          .cargo-btn:hover { background: #5a67d8; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3); }
-          .cargo-btn-success { background: #38a169; width: 100%; margin-top: 15px; padding: 15px; font-size: 16px; }
-          .cargo-btn-danger { background: #e53e3e; margin-left: 10px; }
-          .cargo-items-list { max-height: 200px; overflow-y: auto; border: 2px solid #e2e8f0; border-radius: 8px; padding: 10px; }
-          .cargo-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin: 5px 0; background: #f7fafc; border-radius: 6px; font-size: 14px; }
-          .cargo-item button { background: #e53e3e; padding: 4px 8px; font-size: 12px; border: none; border-radius: 4px; color: white; cursor: pointer; }
-          .cargo-canvas { border: 2px solid #e2e8f0; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); }
-          .cargo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 20px; }
-          .cargo-stat-card { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 15px; border-radius: 10px; text-align: center; }
-          .cargo-stat-value { font-size: 1.5rem; font-weight: 700; margin-bottom: 5px; }
-          .cargo-stat-label { font-size: 0.8rem; opacity: 0.9; }
-          .cargo-view-selector { display: flex; gap: 10px; justify-content: center; margin: 20px 0; }
-          .cargo-view-btn { background: #e2e8f0; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4a5568; transition: all 0.3s ease; }
-          .cargo-view-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: scale(1.05); }
-          .cargo-canvas-container { display: flex; justify-content: center; margin-top: 20px; flex-wrap: wrap; gap: 30px; }
-          .cargo-canvas-wrapper { display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; }
-          .cargo-canvas-title { font-weight: 600; color: #4a5568; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-          .cargo-canvas-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-          .zoom-control { display: flex; align-items: center; gap: 10px; background: white; padding: 8px 12px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-          .zoom-btn { background: #667eea; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-          .zoom-btn:hover { background: #5a67d8; }
-          .zoom-btn:disabled { background: #cbd5e0; cursor: not-allowed; }
-          .zoom-level { font-size: 14px; font-weight: 600; color: #4a5568; min-width: 50px; text-align: center; }
-          .fullscreen-btn { background: #38a169; color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; }
-          .fullscreen-btn:hover { background: #2f855a; }
-          .fullscreen-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-          .fullscreen-content { background: white; padding: 20px; border-radius: 10px; max-width: 95vw; max-height: 95vh; overflow: auto; }
-          .fullscreen-close { position: absolute; top: 20px; right: 20px; background: #e53e3e; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: bold; }
-          .fullscreen-close:hover { background: #c53030; }
-          .units-container { display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap; }
-          .units-group { display: flex; gap: 10px; align-items: center; }
-          @media (max-width: 768px) {
-            .cargo-controls { grid-template-columns: 1fr; }
-            .cargo-dimension-inputs { grid-template-columns: 1fr; }
-            .cargo-stats { grid-template-columns: repeat(2, 1fr); }
-          }
-        `}</style>
-        
-        <h1 className="text-center text-3xl font-bold mb-8 text-gray-800">📦 3D Cargo Fitter with Pallets</h1>
-        
-        <div className="units-container">
-          <div className="units-group">
-            <label className="font-semibold text-gray-600">Units:</label>
+    // rebuild visuals
+    rebuildBoxes();
+    // force small rerender so UI list updates
+    forceRerender(v => v + 1);
+  }, [container.length, container.width, container.height, rebuildBoxes]);
+
+  // apply preset
+  const applyPreset = (key: string) => {
+    const p = containerPresets[key];
+    if (!p) return;
+    const l = fromCm(p.length, p.units);
+    const w = fromCm(p.width, p.units);
+    const h = fromCm(p.height, p.units);
+    setContainer({ length: String(l), width: String(w), height: String(h) });
+  };
+
+  // initial render of boxes when container or items change
+  useEffect(() => {
+    updateStatsAndRender();
+  }, [updateStatsAndRender]);
+
+  // UI JSX
+  return (
+    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 className="text-3xl font-bold text-gray-800 mb-2">Cargo Fitter 3D</h2>
+        <p className="text-gray-600">Interactive 3D cargo loading optimization with Next.js and Three.js</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Container Settings */}
+        <div className="bg-white p-6 rounded-lg shadow-sm">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">Container Dimensions</h4>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Length</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={container.length} 
+                onChange={e => setContainer({...container, length: e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Width</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={container.width} 
+                onChange={e => setContainer({...container, width: e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Height</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={container.height} 
+                onChange={e => setContainer({...container, height: e.target.value})} 
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">Units</label>
             <select 
-              className="p-2 border-2 border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
               value={units} 
-              onChange={(e) => handleUnitsChange(e.target.value)}
+              onChange={e => setUnits(e.target.value)}
             >
               <option value="cm">Centimeters (cm)</option>
               <option value="m">Meters (m)</option>
@@ -666,393 +508,230 @@
               <option value="ft">Feet (ft)</option>
             </select>
           </div>
-          
-          <div className="units-group">
-            <label className="font-semibold text-gray-600">Weight Units:</label>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Quick Presets</label>
             <select 
-              className="p-2 border-2 border-gray-300 rounded-md"
-              value={weightUnits} 
-              onChange={(e) => handleWeightUnitsChange(e.target.value)}
-            >
-              <option value="kg">Kilograms (kg)</option>
-              <option value="g">Grams (g)</option>
-              <option value="lb">Pounds (lb)</option>
-              <option value="oz">Ounces (oz)</option>
-            </select>
-          </div>
-          
-          <div className="units-group">
-            <label className="font-semibold text-gray-600">Container Presets:</label>
-            <select 
-              className="p-2 border-2 border-gray-300 rounded-md bg-gradient-to-r from-blue-500 to-purple-600 text-white"
-              onChange={(e) => {
-                if (e.target.value) {
-                  applyPreset(e.target.value);
-                  e.target.value = '';
-                }
-              }} 
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+              onChange={e => { if(e.target.value) applyPreset(e.target.value); e.target.value=''; }} 
               defaultValue=""
             >
-              <option value="">Select a preset...</option>
-              <option value="53-truck">🚛 53&apos; Truck</option>
-              <option value="48-truck">🚚 48&apos; Truck</option>
-              <option value="sprinter">🚐 Sprinter Van</option>
-              <option value="pmc-q6">📦 PMC MD (Q6)</option>
-              <option value="pmc-q7">📦 PMC MD (Q7)</option>
-              <option value="pmc-j4">📦 PMC MD (J4)</option>
-              <option value="pmc-ld">📦 PMC LD</option>
+              <option value="">-- Select Preset --</option>
+              <option value="53-truck">53&#39; Truck Trailer</option>
+              <option value="48-truck">48&#39; Truck Trailer</option>
+              <option value="sprinter">Mercedes Sprinter Van</option>
             </select>
           </div>
         </div>
-        
-        <div className="cargo-controls">
-          <div className="cargo-section">
-            <h3>Container Dimensions</h3>
-            <div className="cargo-dimension-inputs">
-              <div className="cargo-dimension-group">
-                <label>Length ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={containerDims.length}
-                  placeholder="Enter length"
-                  onChange={(e) => setContainerDims({
-                    ...containerDims,
-                    length: e.target.value
-                  })}
-                  min="1"
-                />
-              </div>
-              <div className="cargo-dimension-group">
-                <label>Width ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={containerDims.width}
-                  placeholder="Enter width"
-                  onChange={(e) => setContainerDims({
-                    ...containerDims,
-                    width: e.target.value
-                  })}
-                  min="1"
-                />
-              </div>
-              <div className="cargo-dimension-group">
-                <label>Height ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={containerDims.height}
-                  placeholder="Enter height"
-                  onChange={(e) => setContainerDims({
-                    ...containerDims,
-                    height: e.target.value
-                  })}
-                  min="1"
-                />
-              </div>
+
+        {/* Item Input */}
+        <div className="bg-white p-6 rounded-lg shadow-sm">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">Add Cargo Item</h4>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Length</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="L" 
+                value={itemInput.length} 
+                onChange={e=>setItemInput({...itemInput,length:e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Width</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="W" 
+                value={itemInput.width} 
+                onChange={e=>setItemInput({...itemInput,width:e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Height</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="H" 
+                value={itemInput.height} 
+                onChange={e=>setItemInput({...itemInput,height:e.target.value})} 
+              />
             </div>
           </div>
-          
-          <div className="cargo-section">
-            <h3>Add Pallet</h3>
-            <div className="cargo-dimension-inputs">
-              <div className="cargo-dimension-group">
-                <label>Length ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={itemInput.length}
-                  placeholder="Enter length"
-                  onChange={(e) => setItemInput({
-                    ...itemInput,
-                    length: e.target.value
-                  })}
-                  min="0.1"
-                  step="0.1"
-                />
-              </div>
-              <div className="cargo-dimension-group">
-                <label>Width ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={itemInput.width}
-                  placeholder="Enter width"
-                  onChange={(e) => setItemInput({
-                    ...itemInput,
-                    width: e.target.value
-                  })}
-                  min="0.1"
-                  step="0.1"
-                />
-              </div>
-              <div className="cargo-dimension-group">
-                <label>Height ({units})</label>
-                <input
-                  type="number"
-                  className="cargo-input"
-                  value={itemInput.height}
-                  placeholder="Enter height"
-                  onChange={(e) => setItemInput({
-                    ...itemInput,
-                    height: e.target.value
-                  })}
-                  min="0.1"
-                  step="0.1"
-                />
-              </div>
-            </div>
-            
-            <div className="cargo-input-group">
-              <label>Weight ({weightUnits}):</label>
-              <input
-                type="number"
-                className="cargo-input"
-                value={itemInput.weight}
-                placeholder="Enter weight"
-                onChange={(e) => setItemInput({
-                  ...itemInput,
-                  weight: e.target.value
-                })}
-                min="0.1"
-                step="0.1"
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Weight</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="Weight" 
+                value={itemInput.weight} 
+                onChange={e=>setItemInput({...itemInput,weight:e.target.value})} 
               />
             </div>
-            
-            <div className="cargo-input-group">
-              <label>Name:</label>
-              <input
-                type="text"
-                className="cargo-input"
-                value={itemInput.name}
-                placeholder="Pallet name"
-                onChange={(e) => setItemInput({
-                  ...itemInput,
-                  name: e.target.value
-                })}
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Weight Units</label>
+              <select 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                value={weightUnits} 
+                onChange={e=>setWeightUnits(e.target.value)}
+              >
+                <option value="kg">Kilograms (kg)</option>
+                <option value="lb">Pounds (lb)</option>
+                <option value="g">Grams (g)</option>
+                <option value="oz">Ounces (oz)</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Quantity</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="Quantity" 
+                value={itemInput.quantity} 
+                onChange={e=>setItemInput({...itemInput,quantity:e.target.value})} 
               />
             </div>
-            
-            <div className="cargo-input-group">
-              <label>Quantity:</label>
-              <input
-                type="number"
-                className="cargo-input"
-                value={itemInput.quantity}
-                onChange={(e) => setItemInput({
-                  ...itemInput,
-                  quantity: e.target.value
-                })}
-                min="1"
-                step="1"
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Name</label>
+              <input 
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
+                placeholder="Item Name" 
+                value={itemInput.name} 
+                onChange={e=>setItemInput({...itemInput,name:e.target.value})} 
               />
             </div>
-            
-            <button className="cargo-btn" onClick={addItem}>Add Pallet(s)</button>
-            <button className="cargo-btn cargo-btn-danger" onClick={clearItems}>Clear All</button>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={addItem} 
+              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors"
+            >
+              Add Item
+            </button>
+            <button 
+              onClick={clearItems} 
+              className="bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Clear All
+            </button>
+            <button 
+              onClick={fitItems} 
+              className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Optimize Fit
+            </button>
           </div>
         </div>
-        
-        <div className="cargo-section">
-          <h3>Pallets to Pack ({items.length} total items)</h3>
-          <div className="cargo-items-list">
-            {items.map((item) => (
-              <div key={item.id} className="cargo-item">
-                <span>
-                  {item.name} ({item.length}×{item.width}×{item.height}{units}, {item.weight}{weightUnits})
-                  {item.fitted && <span style={{color: 'green', fontWeight: 'bold'}}> ✓ Fitted</span>}
-                  {item.fitted === false && <span style={{color: 'red', fontWeight: 'bold'}}> ✗ Not Fitted</span>}
-                </span>
-                <button onClick={() => removeItem(item.id)}>Remove</button>
+
+        {/* Stats */}
+        <div className="bg-white p-6 rounded-lg shadow-sm">
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">Loading Statistics</h4>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Total Items:</span>
+              <span className="font-semibold text-gray-800">{stats.totalItems}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-green-600">✅ Fitted:</span>
+              <span className="font-semibold text-green-600">{stats.fitted}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-red-600">❌ Unfitted:</span>
+              <span className="font-semibold text-red-600">{stats.unfitted}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-blue-600">Space Efficiency:</span>
+              <span className="font-semibold text-blue-600">{stats.efficiency}%</span>
+            </div>
+            <div className="border-t pt-3 mt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Total Weight:</span>
+                <span className="font-semibold">{(weightFromKg(stats.totalWeight, weightUnits) || 0).toFixed(2)} {weightUnits}</span>
               </div>
-            ))}
-          </div>
-          <button className="cargo-btn cargo-btn-success" onClick={fitItems}>
-            🎯 Fit All Pallets
-          </button>
-        </div>
-        
-        <div className="cargo-section mt-8">
-          <h3>3D Packing Visualization</h3>
-          <div className="cargo-view-selector">
-            <button 
-              className={`cargo-view-btn ${viewMode === 'top' ? 'active' : ''}`}
-              onClick={() => handleViewChange('top')}
-            >
-              🔍 Top View
-            </button>
-            <button 
-              className={`cargo-view-btn ${viewMode === 'side' ? 'active' : ''}`}
-              onClick={() => handleViewChange('side')}
-            >
-              🔍 Side View
-            </button>
-            <button 
-              className={`cargo-view-btn ${viewMode === 'dual' ? 'active' : ''}`}
-              onClick={() => handleViewChange('dual')}
-            >
-              🔍 Dual View
-            </button>
-          </div>
-          
-          <div className={`cargo-canvas-container ${viewMode === 'dual' ? 'dual-view' : 'single-view'}`}>
-            {(viewMode === 'top' || viewMode === 'dual') && (
-              <div className="cargo-canvas-wrapper">
-                <div className="cargo-canvas-title">Top View (Length × Width)</div>
-                <div className="cargo-canvas-controls">
-                  <div className="zoom-control">
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
-                      disabled={zoomLevel <= 0.5}
-                    >
-                      −
-                    </button>
-                    <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.25))}
-                      disabled={zoomLevel >= 3}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <button 
-                    className="fullscreen-btn" 
-                    onClick={() => setFullScreenView('top')}
-                  >
-                    🔍 Full Screen
-                  </button>
-                </div>
-                <canvas 
-                  ref={topCanvasRef}
-                  className="cargo-canvas"
-                  width={viewMode === 'dual' ? 400 : 600}
-                  height={viewMode === 'dual' ? 300 : 400}
-                />
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-gray-600">Fitted Weight:</span>
+                <span className="font-semibold text-green-600">{(weightFromKg(stats.fittedWeight, weightUnits) || 0).toFixed(2)} {weightUnits}</span>
               </div>
-            )}
-            
-            {(viewMode === 'side' || viewMode === 'dual') && (
-              <div className="cargo-canvas-wrapper">
-                <div className="cargo-canvas-title">Side View (Length × Height)</div>
-                <div className="cargo-canvas-controls">
-                  <div className="zoom-control">
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
-                      disabled={zoomLevel <= 0.5}
-                    >
-                      −
-                    </button>
-                    <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.25))}
-                      disabled={zoomLevel >= 3}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <button 
-                    className="fullscreen-btn" 
-                    onClick={() => setFullScreenView('side')}
-                  >
-                    🔍 Full Screen
-                  </button>
-                </div>
-                <canvas 
-                  ref={sideCanvasRef}
-                  className="cargo-canvas"
-                  width={viewMode === 'dual' ? 400 : 600}
-                  height={viewMode === 'dual' ? 300 : 400}
-                />
-              </div>
-            )}
-          </div>
-          
-          <div className="cargo-stats">
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.totalPallets}</div>
-              <div className="cargo-stat-label">Pallet Types</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.totalItems}</div>
-              <div className="cargo-stat-label">Total Pallets</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.fittedItems}</div>
-              <div className="cargo-stat-label">Fitted Pallets</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.unfittedItems}</div>
-              <div className="cargo-stat-label">Unfitted Pallets</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.efficiency}%</div>
-              <div className="cargo-stat-label">Space Efficiency</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.totalWeight}</div>
-              <div className="cargo-stat-label">Total Weight ({weightUnits})</div>
-            </div>
-            <div className="cargo-stat-card">
-              <div className="cargo-stat-value">{stats.fittedWeight}</div>
-              <div className="cargo-stat-label">Fitted Weight ({weightUnits})</div>
             </div>
           </div>
         </div>
-        
-        {/* Full Screen Overlay */}
-        {fullScreenView !== 'none' && (
-          <div className="fullscreen-overlay">
-            <button 
-              className="fullscreen-close"
-              onClick={() => setFullScreenView('none')}
-            >
-              ×
-            </button>
-            <div className="fullscreen-content">
-              <div className="cargo-canvas-wrapper">
-                <div className="cargo-canvas-title">
-                  {fullScreenView === 'top' ? 'Top View (Length × Width) - Full Screen' : 'Side View (Length × Height) - Full Screen'}
-                </div>
-                <div className="cargo-canvas-controls">
-                  <div className="zoom-control">
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
-                      disabled={zoomLevel <= 0.5}
-                    >
-                      −
-                    </button>
-                    <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-                    <button 
-                      className="zoom-btn" 
-                      onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.25))}
-                      disabled={zoomLevel >= 3}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <button 
-                    className="fullscreen-btn" 
-                    onClick={() => setZoomLevel(1)}
-                  >
-                    Reset Zoom
-                  </button>
-                </div>
-                <canvas 
-                  ref={fullScreenView === 'top' ? topCanvasRef : sideCanvasRef}
-                  className="cargo-canvas"
-                  width={800}
-                  height={600}
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    );
-  }
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 3D Visualization */}
+        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 border-b">
+            <h4 className="text-lg font-semibold text-gray-800">3D Cargo Visualization</h4>
+            <p className="text-sm text-gray-600">Drag to rotate • Scroll to zoom • Fitted items are solid, unfitted are transparent with red wireframe</p>
+          </div>
+          <div 
+            ref={mountRef} 
+            className="w-full" 
+            style={{ height: '560px', background: '#f8fafc' }}
+          />
+        </div>
+
+        {/* Items List */}
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="p-4 border-b">
+            <h4 className="text-lg font-semibold text-gray-800">Items List</h4>
+          </div>
+          <div className="max-h-96 overflow-y-auto p-4">
+            {itemsRef.current.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No items added yet</p>
+                <p className="text-sm">Add items to see them here</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {itemsRef.current.map(it => (
+                  <div key={it.id} className={`p-3 border rounded-md ${it.fitted ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-800">{it.name}</div>
+                        <div className="text-sm text-gray-600">
+                          {fromCm(it.length, units).toFixed(1)} × {fromCm(it.width, units).toFixed(1)} × {fromCm(it.height, units).toFixed(1)} {units}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {(weightFromKg(it.weight, weightUnits) || 0).toFixed(2)} {weightUnits}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="text-lg">
+                          {it.fitted ? '✅' : '❌'}
+                        </div>
+                        <button 
+                          onClick={() => removeItem(it.id)} 
+                          className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-6 bg-white rounded-lg shadow-sm p-6">
+        <h4 className="text-lg font-semibold text-gray-800 mb-3">How to Use</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+          <div>
+            <h5 className="font-semibold text-gray-800 mb-2">1. Set Container</h5>
+            <p>Define your container dimensions or choose from presets like truck trailers and vans. All units are automatically converted internally.</p>
+          </div>
+          <div>
+            <h5 className="font-semibold text-gray-800 mb-2">2. Add Items</h5>
+            <p>Add cargo items with dimensions, weight, and quantity. Items appear in the 3D view and can be individually managed.</p>
+          </div>
+          <div>
+            <h5 className="font-semibold text-gray-800 mb-2">3. Optimize</h5>
+            <p>Click &#34;Optimize Fit&#34; to run the packing algorithm. Fitted items are solid green, unfitted items are red wireframes.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
