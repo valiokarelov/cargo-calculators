@@ -1030,13 +1030,13 @@ const CargoEquipmentCatalog = () => {
         type: "Sea Container",
         icon: Container,
         specs: {
-          length: "230.3 cm",
-          width: "92.5 cm",
-          height: "94.3 cm",
+          length: "233 in",
+          width: "92 in",
+          height: "94 in",
           payload: "20,000 kg",
           tare: "2,300 kg",
-          doorHeight: "90.2 cm",
-          doorWidth: "92.1 cm"
+          doorHeight: "90.2 in",
+          doorWidth: "92.1 in"
         }
       },
       {
@@ -1045,13 +1045,13 @@ const CargoEquipmentCatalog = () => {
         type: "Sea Container",
         icon: Container,
         specs: {
-          length: "473.7 cm",
-          width: "92.5 cm",
-          height: "94.3 cm",
+          length: "472 in",
+          width: "92 in",
+          height: "94 in",
           payload: "22,000 kg",
           tare: "3,750 kg",
-          doorHeight: "90.2 cm",
-          doorWidth: "92.1 cm"
+          doorHeight: "90.2 in",
+          doorWidth: "92.1 in"
         }
       },
       {
@@ -1060,13 +1060,13 @@ const CargoEquipmentCatalog = () => {
         type: "Sea Container",
         icon: Container,
         specs: {
-          length: "473.7 cm",
-          width: "92.5 cm",
-          height: "106.3 cm",
+          length: "473 in",
+          width: "93 in",
+          height: "106 in",
           payload: "25,000 kg",
           tare: "3,940 kg",
-          doorHeight: "102 cm",
-          doorWidth: "92.1 cm"
+          doorHeight: "102 in",
+          doorWidth: "92.1 in"
         }
       },
       {
@@ -1075,13 +1075,13 @@ const CargoEquipmentCatalog = () => {
         type: "Sea Container",
         icon: Container,
         specs: {
-          length: "533.7 cm",
-          width: "92.6 cm",
-          height: "106.3 cm",
+          length: "534 in",
+          width: "92 in",
+          height: "106 in",
           payload: "26,000 kg",
           tare: "4,820 kg",
-          doorHeight: "102 cm",
-          doorWidth: "92.1 cm"
+          doorHeight: "102 in",
+          doorWidth: "92.1 in"
         }
       }
     ]

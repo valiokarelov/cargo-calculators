@@ -1,21 +1,13 @@
 // src/components/CargoFitterThree.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
-
-// Remove the unused imports completely
-import { PlacedItem } from "@/lib/packing";
+import { twoPassPack, PlacedItem, Container } from "@/lib/packing";
 
 // Types for local UI state
 interface CargoItem extends PlacedItem {
   weight: number; // kg
   name: string;
   quantity: number; // always 1 after expansion
-}
-
-interface CargoContainer {
-  length: number;
-  width: number;
-  height: number;
 }
 
 interface ContainerPreset {
@@ -63,38 +55,10 @@ const uid = () => `${Date.now()}-${Math.random()}`;
 const conversionFactors: ConversionFactors = { cm: 1, m: 100, in: 2.54, ft: 30.48 };
 const weightConversion: ConversionFactors = { kg: 1, g: 1 / 1000, lb: 0.45359237, oz: 0.0283495231 };
 
-// Cargo equipment data with REAL INNER DIMENSIONS
 const containerPresets: Record<string, ContainerPreset> = {
-  // Truck Trailers (inner dimensions)
-  "53-truck": { 
-    length: 636, width: 102, height: 110, 
-    name: "53' Truck Trailer", units: "in" 
-  },
-  "48-truck": { 
-    length: 576, width: 102, height: 110, 
-    name: "48' Truck Trailer", units: "in" 
-  },
-  "sprinter": { 
-    length: 142, width: 67, height: 71, 
-    name: "Mercedes Sprinter Van", units: "in" 
-  },
-  // Sea Containers (inner dimensions) - CORRECTED SIZES FROM CATALOG
-  "20ft-dv": { 
-    length: 233, width: 92, height: 94, 
-    name: "20ft Dry Van Container", units: "in" 
-  },
-  "40ft-dv": { 
-    length: 472, width: 92, height: 94, 
-    name: "40ft Dry Van Container", units: "in" 
-  },
-  "40ft-hc": { 
-    length: 473, width: 93, height: 106, 
-    name: "40ft High Cube Container", units: "in" 
-  },
-  "45ft-hq": { 
-    length: 534, width: 92, height: 106, 
-    name: "45ft High Cube Container", units: "in" 
-  }
+  "53-truck": { length: 1600, width: 256, height: 279, name: "53' Truck", units: "cm" },
+  "48-truck": { length: 1455, width: 256, height: 279, name: "48' Truck", units: "cm" },
+  sprinter:    { length: 360,  width: 170, height: 180, name: "Sprinter Van", units: "cm" },
 };
 
 function toCm(value: number, unit: string) { return value * (conversionFactors[unit] ?? 1); }
@@ -104,80 +68,20 @@ function weightFromKg(valueKg: number, unit: string) { return valueKg / (weightC
 
 export default function CargoFitterThree() {
   // UI state
-  const [units, setUnits] = useState<string>("in"); // Changed default to inches
-  const [weightUnits, setWeightUnits] = useState<string>("lb"); // Changed default to pounds
+  const [units, setUnits] = useState<string>("cm");
+  const [weightUnits, setWeightUnits] = useState<string>("kg");
 
   const [container, setContainer] = useState<ContainerDimensions>({
-    length: "", width: "", height: "", // No pre-set values
+    length: "1200", width: "240", height: "200",
   });
 
   const [itemInput, setItemInput] = useState<ItemInput>({
-    length: "", width: "", height: "", weight: "", name: "", quantity: "1", // No pre-set values
+    length: "120", width: "100", height: "140", weight: "300", name: "Pallet", quantity: "1",
   });
 
   // Items kept in a ref so three.js can mutate without re-renders
   const itemsRef = useRef<CargoItem[]>([]);
   const [, forceRerender] = useState<number>(0);
-
-  // Convert existing container dimensions when units change
-  const [previousUnits, setPreviousUnits] = useState<string>("in");
-  const [previousWeightUnits, setPreviousWeightUnits] = useState<string>("lb");
-  
-  useEffect(() => {
-    if (previousUnits !== units && (container.length || container.width || container.height)) {
-      // Convert container dimensions
-      const currentLength = Number(container.length) || 0;
-      const currentWidth = Number(container.width) || 0;
-      const currentHeight = Number(container.height) || 0;
-      
-      // Convert from previous units to cm, then to new units
-      const convertedLength = fromCm(toCm(currentLength, previousUnits), units);
-      const convertedWidth = fromCm(toCm(currentWidth, previousUnits), units);
-      const convertedHeight = fromCm(toCm(currentHeight, previousUnits), units);
-      
-      setContainer({
-        length: convertedLength > 0 ? convertedLength.toFixed(1) : "",
-        width: convertedWidth > 0 ? convertedWidth.toFixed(1) : "",
-        height: convertedHeight > 0 ? convertedHeight.toFixed(1) : "",
-      });
-      
-      // Convert item input dimensions
-      if (itemInput.length || itemInput.width || itemInput.height) {
-        const currentItemLength = Number(itemInput.length) || 0;
-        const currentItemWidth = Number(itemInput.width) || 0;
-        const currentItemHeight = Number(itemInput.height) || 0;
-        
-        const convertedItemLength = fromCm(toCm(currentItemLength, previousUnits), units);
-        const convertedItemWidth = fromCm(toCm(currentItemWidth, previousUnits), units);
-        const convertedItemHeight = fromCm(toCm(currentItemHeight, previousUnits), units);
-        
-        setItemInput(prev => ({
-          ...prev,
-          length: convertedItemLength > 0 ? convertedItemLength.toFixed(1) : "",
-          width: convertedItemWidth > 0 ? convertedItemWidth.toFixed(1) : "",
-          height: convertedItemHeight > 0 ? convertedItemHeight.toFixed(1) : "",
-        }));
-      }
-      
-      setPreviousUnits(units);
-    }
-     
-  }, [units, previousUnits, container.length, container.width, container.height, itemInput.length, itemInput.width, itemInput.height]);
-
-  useEffect(() => {
-    if (previousWeightUnits !== weightUnits && itemInput.weight) {
-      // Convert item input weight
-      const currentWeight = Number(itemInput.weight) || 0;
-      const convertedWeight = weightFromKg(weightToKg(currentWeight, previousWeightUnits), weightUnits);
-      
-      setItemInput(prev => ({
-        ...prev,
-        weight: convertedWeight > 0 ? convertedWeight.toFixed(1) : "",
-      }));
-      
-      setPreviousWeightUnits(weightUnits);
-    }
-  }, [weightUnits, previousWeightUnits, itemInput.weight]);
 
   // Three.js refs
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -193,7 +97,7 @@ export default function CargoFitterThree() {
   });
 
   // Helper to get container in cm (internal canonical)
-  const getContainerCm = useCallback((): CargoContainer => {
+  const getContainerCm = useCallback((): Container => {
     const cL = toCm(Number(container.length || 0), units);
     const cW = toCm(Number(container.width || 0), units);
     const cH = toCm(Number(container.height || 0), units);
@@ -204,205 +108,6 @@ export default function CargoFitterThree() {
     let h = 0; 
     for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i); 
     return Math.abs(h); 
-  };
-
-  // Forklift-style packing algorithm: left, right, top left, top right pattern
-  const customPack = useCallback((container: CargoContainer, items: CargoItem[]): CargoItem[] => {
-    const result = items.map(item => ({ ...item, fitted: false }));
-    const placed: CargoItem[] = [];
-    
-    // Sort items by volume (largest first) for better packing
-    const sortedItems = [...result].sort((a, b) => 
-      (b.length * b.width * b.height) - (a.length * a.width * a.height)
-    );
-
-    for (const item of sortedItems) {
-      let bestPosition: { x: number; y: number; z: number; rotated?: boolean } | null = null;
-      let bestItem = { ...item };
-
-      // Try both orientations
-      const orientations = [
-        { length: item.length, width: item.width, height: item.height, rotated: false },
-        { length: item.width, width: item.length, height: item.height, rotated: true }
-      ];
-
-      for (const orientation of orientations) {
-        // Check if item fits in container
-        if (orientation.length > container.length || 
-            orientation.width > container.width || 
-            orientation.height > container.height) {
-          continue;
-        }
-
-        // Generate positions in forklift loading order
-        const possiblePositions: { x: number; y: number; z: number; priority: number }[] = [];
-        
-        if (placed.length === 0) {
-          // First item: place on the left side (driver's perspective)
-          possiblePositions.push({ 
-            x: 0, 
-            y: 0, 
-            z: 0,
-            priority: 1
-          });
-        } else {
-          // Find all ground-level positions first (z = 0)
-          const groundPositions: { x: number; y: number; z: number; priority: number }[] = [];
-          
-          // Check positions adjacent to existing ground-level items
-          for (const placedItem of placed) {
-            if (placedItem.z === 0) { // Only ground-level items
-              // Behind this item (higher X)
-              const behindX = placedItem.x + placedItem.length;
-              if (behindX + orientation.length <= container.length) {
-                // Left side behind
-                if (placedItem.y >= orientation.width) {
-                  groundPositions.push({
-                    x: behindX,
-                    y: placedItem.y - orientation.width,
-                    z: 0,
-                    priority: getForkliftPriority(behindX, placedItem.y - orientation.width, 0, container)
-                  });
-                }
-                // Right side behind
-                const rightY = placedItem.y + placedItem.width;
-                if (rightY + orientation.width <= container.width) {
-                  groundPositions.push({
-                    x: behindX,
-                    y: rightY,
-                    z: 0,
-                    priority: getForkliftPriority(behindX, rightY, 0, container)
-                  });
-                }
-              }
-              
-              // To the right of this item (higher Y)
-              const rightY = placedItem.y + placedItem.width;
-              if (rightY + orientation.width <= container.width) {
-                groundPositions.push({
-                  x: placedItem.x,
-                  y: rightY,
-                  z: 0,
-                  priority: getForkliftPriority(placedItem.x, rightY, 0, container)
-                });
-              }
-              
-              // To the left of this item (lower Y) 
-              if (placedItem.y >= orientation.width) {
-                groundPositions.push({
-                  x: placedItem.x,
-                  y: placedItem.y - orientation.width,
-                  z: 0,
-                  priority: getForkliftPriority(placedItem.x, placedItem.y - orientation.width, 0, container)
-                });
-              }
-            }
-          }
-          
-          // Add stacking positions (on top of existing items)
-          for (const placedItem of placed) {
-            const stackZ = placedItem.z + placedItem.height;
-            if (stackZ + orientation.height <= container.height) {
-              possiblePositions.push({
-                x: placedItem.x,
-                y: placedItem.y,
-                z: stackZ,
-                priority: getForkliftPriority(placedItem.x, placedItem.y, stackZ, container) + 1000 // Lower priority for stacking
-              });
-            }
-          }
-          
-          // Add unique ground positions
-          const uniqueGroundPositions = groundPositions.filter((pos, index, self) =>
-            index === self.findIndex(p => 
-              Math.abs(p.x - pos.x) < 0.1 && 
-              Math.abs(p.y - pos.y) < 0.1 && 
-              Math.abs(p.z - pos.z) < 0.1
-            )
-          );
-          
-          possiblePositions.push(...uniqueGroundPositions);
-        }
-
-        // Sort by forklift priority (lower number = higher priority)
-        possiblePositions.sort((a, b) => a.priority - b.priority);
-
-        for (const pos of possiblePositions) {
-          const { x, y, z } = pos;
-          
-          // Check if position is valid (no overlap with existing items)
-          const canPlace = !placed.some(placedItem => 
-            !(x >= placedItem.x + placedItem.length || 
-              x + orientation.length <= placedItem.x ||
-              y >= placedItem.y + placedItem.width || 
-              y + orientation.width <= placedItem.y ||
-              z >= placedItem.z + placedItem.height || 
-              z + orientation.height <= placedItem.z)
-          );
-
-          // Check if item has support (either on ground or on another item)
-          const hasSupport = z === 0 || placed.some(placedItem => 
-            Math.abs(placedItem.z + placedItem.height - z) < 0.1 && // On top of another item
-            !(x >= placedItem.x + placedItem.length || 
-              x + orientation.length <= placedItem.x ||
-              y >= placedItem.y + placedItem.width || 
-              y + orientation.width <= placedItem.y)
-          );
-
-          if (canPlace && hasSupport) {
-            // Final boundary safety check
-            if (x + orientation.length <= container.length &&
-                y + orientation.width <= container.width &&
-                z + orientation.height <= container.height) {
-              bestPosition = { x, y, z, rotated: orientation.rotated };
-              bestItem = {
-                ...item,
-                x, y, z,
-                length: orientation.length,
-                width: orientation.width,
-                height: orientation.height,
-                fitted: true
-              };
-              break;
-            }
-          }
-        }
-        if (bestPosition) break;
-      }
-
-      if (bestPosition) {
-        placed.push(bestItem);
-        // Update the item in result array
-        const itemIndex = result.findIndex(r => r.id === item.id);
-        if (itemIndex !== -1) {
-          result[itemIndex] = bestItem;
-        }
-      }
-    }
-
-    return result;
-  }, []);
-
-  // Helper function to calculate forklift priority
-  const getForkliftPriority = (x: number, y: number, z: number, container: CargoContainer): number => {
-    // Determine position in container (left/right based on Y coordinate)
-    const isLeft = y < container.width / 2;
-    const rowFromFront = Math.floor(x / 100); // Assume ~100cm per "row"
-    const level = Math.floor(z / 100); // Assume ~100cm per "level"
-    
-    // Forklift loading pattern priority:
-    // Row 0: Left(1), Right(2)
-    // Row 1: Left(3), Right(4) 
-    // Row 0 Level 1: Left(5), Right(6)
-    // Row 1 Level 1: Left(7), Right(8)
-    // etc.
-    
-    let priority = 0;
-    priority += level * 1000; // Higher levels get much higher priority numbers (loaded later)
-    priority += rowFromFront * 10; // Back rows get higher priority numbers 
-    priority += isLeft ? 1 : 2; // Within same row/level: left first, then right
-    
-    return priority;
   };
 
   // Visual rebuild from itemsRef
@@ -610,8 +315,7 @@ export default function CargoFitterThree() {
       cameraRef.current = null; 
       controlsRef.current = null;
     };
-     
-  }, [setupOrbitControls]); // mountRef.current is intentionally excluded - it's stable
+  }, [setupOrbitControls]); // Now properly includes setupOrbitControls in dependencies
 
   // Add items (expands quantity)
   const addItem = useCallback((): void => {
@@ -646,7 +350,7 @@ export default function CargoFitterThree() {
     updateStatsAndRender(); 
   }, [updateStatsAndRender]);
 
-  // Updated packing algorithm using custom logic
+  // NEW: Stacking-aware two-pass optimizer using the pure function
   const fitItems = useCallback((): void => {
     const { length: cL, width: cW, height: cH } = getContainerCm();
     if (cL <= 0 || cW <= 0 || cH <= 0) {
@@ -654,37 +358,31 @@ export default function CargoFitterThree() {
       return;
     }
 
-    const packed = customPack(
+    const placed = twoPassPack(
       { length: cL, width: cW, height: cH },
       itemsRef.current.map<CargoItem>(i => ({ ...i }))
     );
 
     // commit results (positions, fitted) back to itemsRef
-    const packedById = new Map(packed.map(p => [p.id, p]));
+    const placedById = new Map(placed.map(p => [p.id, p]));
     itemsRef.current = itemsRef.current.map(i => {
-      const p = packedById.get(i.id);
+      const p = placedById.get(i.id);
       return p ? { ...i, x: p.x, y: p.y, z: p.z, length: p.length, width: p.width, height: p.height, fitted: p.fitted } : i;
     });
 
     updateStatsAndRender();
-  }, [getContainerCm, customPack, updateStatsAndRender]);
+  }, [getContainerCm, updateStatsAndRender]);
 
-  // Apply preset - now correctly converts units
+  // Apply preset
   const applyPreset = useCallback((key: string) => {
     const preset = containerPresets[key]; 
     if (!preset) return;
-    
-    // Convert from preset's native units to current selected units
-    const convertedLength = fromCm(toCm(preset.length, preset.units), units);
-    const convertedWidth = fromCm(toCm(preset.width, preset.units), units);
-    const convertedHeight = fromCm(toCm(preset.height, preset.units), units);
-    
     setContainer({
-      length: convertedLength.toFixed(1),
-      width: convertedWidth.toFixed(1),
-      height: convertedHeight.toFixed(1),
+      length: String(fromCm(preset.length, preset.units)),
+      width:  String(fromCm(preset.width,  preset.units)),
+      height: String(fromCm(preset.height, preset.units)),
     });
-  }, [units]);
+  }, []);
 
   // Initial draw & when deps change
   useEffect(() => { 
@@ -726,29 +424,21 @@ export default function CargoFitterThree() {
             <label className="block text-sm font-medium text-gray-600 mb-1">Units</label>
             <select className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
               value={units} onChange={e => setUnits(e.target.value)}>
-              <option value="in">Inches (in)</option>
-              <option value="ft">Feet (ft)</option>
               <option value="cm">Centimeters (cm)</option>
               <option value="m">Meters (m)</option>
+              <option value="in">Inches (in)</option>
+              <option value="ft">Feet (ft)</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Equipment Presets</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Quick Presets</label>
             <select className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
               onChange={(e) => { if (e.target.value) { applyPreset(e.target.value); e.target.value = ""; } }} defaultValue="">
-              <option value="">-- Select Equipment --</option>
-              <optgroup label="Trucks & Trailers">
-                <option value="53-truck">53&apos; Truck Trailer</option>
-                <option value="48-truck">48&apos; Truck Trailer</option>
-                <option value="sprinter">Mercedes Sprinter Van</option>
-              </optgroup>
-              <optgroup label="Sea Containers">
-                <option value="20ft-dv">20ft Dry Van Container</option>
-                <option value="40ft-dv">40ft Dry Van Container</option>
-                <option value="40ft-hc">40ft High Cube Container</option>
-                <option value="45ft-hq">45ft High Cube Container</option>
-              </optgroup>
+              <option value="">-- Select Preset --</option>
+              <option value="53-truck">53&apos; Truck Trailer</option>
+              <option value="48-truck">48&apos; Truck Trailer</option>
+              <option value="sprinter">Mercedes Sprinter Van</option>
             </select>
           </div>
         </div>
@@ -784,10 +474,10 @@ export default function CargoFitterThree() {
               <label className="block text-sm font-medium text-gray-600 mb-1">Weight Units</label>
               <select className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-500"
                 value={weightUnits} onChange={e => setWeightUnits(e.target.value)}>
-                <option value="lb">Pounds (lb)</option>
                 <option value="kg">Kilograms (kg)</option>
-                <option value="oz">Ounces (oz)</option>
+                <option value="lb">Pounds (lb)</option>
                 <option value="g">Grams (g)</option>
+                <option value="oz">Ounces (oz)</option>
               </select>
             </div>
           </div>
