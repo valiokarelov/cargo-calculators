@@ -2,7 +2,7 @@ import type { AppProps } from "next/app";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
 import { pageview } from "../lib/gtag";
-
+import "../styles/globals.css";  // ✅ add this line
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
