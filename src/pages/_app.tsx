@@ -1,23 +1,23 @@
-import type { AppProps } from 'next/app'
-import Link from 'next/link'
-import '../styles/globals.css'
-import '../styles/cargo-fitter.css'
+import type { AppProps } from "next/app";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
+import { pageview } from "../lib/gtag";
 
-export default function App({ Component, pageProps }: AppProps) {
-  return (
-    <>
-      <nav style={{ 
-        padding: '1rem', 
-        backgroundColor: '#667eea',
-        color: 'white',
-        marginBottom: '2rem',
-        display: 'flex',
-        gap: '2rem'
-      }}>
-        <Link href="/" style={{ color: 'white', textDecoration: 'none' }}>🏠 Home</Link>
-      </nav>
-      
-      <Component {...pageProps} />
-    </>
-  )
+
+export default function MyApp({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleRouteChange = (url: string) => pageview(url);
+    router.events.on("routeChangeComplete", handleRouteChange);
+
+    // initial page load
+    pageview(window.location.pathname + window.location.search);
+
+    return () => {
+      router.events.off("routeChangeComplete", handleRouteChange);
+    };
+  }, [router.events]);
+
+  return <Component {...pageProps} />;
 }
